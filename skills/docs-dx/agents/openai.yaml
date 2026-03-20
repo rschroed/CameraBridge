@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs and DX"
+  short_description: "Keep CameraBridge docs and examples aligned."
+  default_prompt: "Use $docs-dx to update or review CameraBridge documentation, guides, API references, and examples so they stay accurate, concise, and aligned with the current contract."

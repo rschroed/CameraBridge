@@ -1,0 +1,4 @@
+interface:
+  display_name: "macOS App Engineer"
+  short_description: "Build CameraBridgeApp cleanly and narrowly."
+  default_prompt: "Use $macos-app-engineer to implement or review CameraBridgeApp changes so onboarding, menu bar UX, launch behavior, and status visibility stay clear without duplicating backend logic."

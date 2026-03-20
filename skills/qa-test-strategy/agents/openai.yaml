@@ -1,0 +1,4 @@
+interface:
+  display_name: "QA Test Strategy"
+  short_description: "Set the CameraBridge test bar clearly."
+  default_prompt: "Use $qa-test-strategy to define or review the right tests and manual verification for this CameraBridge change, keeping coverage meaningful and hardware-free where possible."
