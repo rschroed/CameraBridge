@@ -28,7 +28,7 @@ struct CameraBridgeDaemon {
         self.logger = logger
     }
 
-    func makeServer(router: CameraBridgeRouter = CameraBridgeRouter()) -> LocalHTTPServer {
+    func makeServer(router: CameraBridgeRouter = CameraBridgeRouter(routes: CameraBridgeRoutes.current())) -> LocalHTTPServer {
         LocalHTTPServer(
             configuration: .init(host: configuration.host, port: configuration.port),
             router: router,
@@ -37,7 +37,7 @@ struct CameraBridgeDaemon {
     }
 
     @discardableResult
-    func start(router: CameraBridgeRouter = CameraBridgeRouter()) throws -> LocalHTTPServer {
+    func start(router: CameraBridgeRouter = CameraBridgeRouter(routes: CameraBridgeRoutes.current())) throws -> LocalHTTPServer {
         logger("starting camd on \(configuration.host):\(configuration.port)")
         let server = makeServer(router: router)
         let port = try server.start()

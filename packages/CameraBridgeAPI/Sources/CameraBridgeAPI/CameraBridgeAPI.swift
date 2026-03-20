@@ -91,6 +91,18 @@ public struct CameraBridgeRouter: Sendable {
     }
 }
 
+public enum CameraBridgeRoutes {
+    public static func current() -> [HTTPRoute] {
+        [health()]
+    }
+
+    public static func health() -> HTTPRoute {
+        HTTPRoute(method: .get, path: "/health") { _ in
+            .json(statusCode: 200, body: #"{ "status": "ok" }"#)
+        }
+    }
+}
+
 public final class LocalHTTPServer: @unchecked Sendable {
     public struct Configuration: Sendable, Equatable {
         public var host: String

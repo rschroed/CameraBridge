@@ -17,18 +17,47 @@ func routerReturnsNotFoundForUnknownRoute() {
 }
 
 @Test
-func localHTTPServerReturnsNotFoundForUnknownRoute() async throws {
+func routerReturnsHealthResponseForHealthRoute() {
+    let router = CameraBridgeRouter(routes: CameraBridgeRoutes.current())
+    let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{ "status": "ok" }"#)
+}
+
+@Test
+func localHTTPServerReturnsHealthResponse() async throws {
     let port = try reserveEphemeralPort()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter()
+        router: CameraBridgeRouter(routes: CameraBridgeRoutes.current())
     )
 
     defer { server.stop() }
 
     let boundPort = try server.start()
-    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/missing"))
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/health"))
     let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "ok" }"#)
+}
+
+@Test
+func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
+    let port = try reserveEphemeralPort()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: CameraBridgeRouter(routes: CameraBridgeRoutes.current())
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    var request = URLRequest(url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/missing")))
+    request.setValue("Bearer unused-token", forHTTPHeaderField: "Authorization")
+    let (data, response) = try await URLSession.shared.data(for: request)
     let httpResponse = try #require(response as? HTTPURLResponse)
 
     #expect(httpResponse.statusCode == 404)
