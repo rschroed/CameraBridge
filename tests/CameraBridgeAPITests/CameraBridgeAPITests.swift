@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import CameraBridgeAPI
+import CameraBridgeCore
 
 @Test
 func apiModuleNameMatchesTarget() {
@@ -18,7 +19,9 @@ func routerReturnsNotFoundForUnknownRoute() {
 
 @Test
 func routerReturnsHealthResponseForHealthRoute() {
-    let router = CameraBridgeRouter(routes: CameraBridgeRoutes.current())
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+    )
     let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
 
     #expect(response.statusCode == 200)
@@ -30,7 +33,9 @@ func localHTTPServerReturnsHealthResponse() async throws {
     let port = try reserveEphemeralPort()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(routes: CameraBridgeRoutes.current())
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+        )
     )
 
     defer { server.stop() }
@@ -49,7 +54,9 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let port = try reserveEphemeralPort()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(routes: CameraBridgeRoutes.current())
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+        )
     )
 
     defer { server.stop() }
@@ -62,6 +69,46 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
 
     #expect(httpResponse.statusCode == 404)
     #expect(String(decoding: data, as: UTF8.self) == #"{ "error": { "code": "not_found", "message": "Route not found" } }"#)
+}
+
+@Test(arguments: PermissionState.allCases)
+func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: state))
+    )
+    let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{ "status": "\#(state.rawValue)" }"#)
+}
+
+@Test
+func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
+    let port = try reserveEphemeralPort()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted))
+        )
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/permissions"))
+    let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "restricted" }"#)
+}
+
+private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
+    let state: PermissionState
+
+    func currentPermissionState() -> PermissionState {
+        state
+    }
 }
 
 private func reserveEphemeralPort() throws -> UInt16 {

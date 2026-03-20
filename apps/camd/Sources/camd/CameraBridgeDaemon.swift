@@ -1,4 +1,5 @@
 import CameraBridgeAPI
+import CameraBridgeCore
 import Foundation
 
 struct ServerConfiguration: Sendable, Equatable {
@@ -28,18 +29,32 @@ struct CameraBridgeDaemon {
         self.logger = logger
     }
 
-    func makeServer(router: CameraBridgeRouter = CameraBridgeRouter(routes: CameraBridgeRoutes.current())) -> LocalHTTPServer {
-        LocalHTTPServer(
+    func makeRouter(
+        permissionStatusProvider: any CameraPermissionStatusProviding = AVFoundationCameraPermissionStatusProvider()
+    ) -> CameraBridgeRouter {
+        CameraBridgeRouter(routes: CameraBridgeRoutes.current(permissionStatusProvider: permissionStatusProvider))
+    }
+
+    func makeServer(
+        router: CameraBridgeRouter? = nil,
+        permissionStatusProvider: any CameraPermissionStatusProviding = AVFoundationCameraPermissionStatusProvider()
+    ) -> LocalHTTPServer {
+        let resolvedRouter = router ?? makeRouter(permissionStatusProvider: permissionStatusProvider)
+
+        return LocalHTTPServer(
             configuration: .init(host: configuration.host, port: configuration.port),
-            router: router,
+            router: resolvedRouter,
             logger: logger
         )
     }
 
     @discardableResult
-    func start(router: CameraBridgeRouter = CameraBridgeRouter(routes: CameraBridgeRoutes.current())) throws -> LocalHTTPServer {
+    func start(
+        router: CameraBridgeRouter? = nil,
+        permissionStatusProvider: any CameraPermissionStatusProviding = AVFoundationCameraPermissionStatusProvider()
+    ) throws -> LocalHTTPServer {
         logger("starting camd on \(configuration.host):\(configuration.port)")
-        let server = makeServer(router: router)
+        let server = makeServer(router: router, permissionStatusProvider: permissionStatusProvider)
         let port = try server.start()
         logger("camd ready on \(configuration.host):\(port)")
         return server
