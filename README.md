@@ -13,8 +13,9 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `examples/` for small example clients
 
 The repository currently includes early daemon and API slices for health,
-permission status, session state, device selection, and basic session
-lifecycle control, with the remaining v1 surface defined in the docs.
+permission status and request, device listing and selection, session state,
+and basic session lifecycle control, with the remaining v1 surface defined in
+the docs.
 
 ## v1 Auth And Ownership
 

@@ -134,6 +134,8 @@ public struct CameraBridgeRouter: Sendable {
 public enum CameraBridgeRoutes {
     public static func current(
         permissionStatusProvider: any CameraPermissionStatusProviding,
+        permissionRequester: any CameraPermissionRequesting,
+        deviceListing: any CameraDeviceListing,
         cameraStateProvider: any CameraStateProviding,
         deviceSelector: any CameraDeviceSelecting,
         sessionStarter: any CameraSessionStarting,
@@ -143,6 +145,8 @@ public enum CameraBridgeRoutes {
         [
             health(),
             permissionStatus(provider: permissionStatusProvider),
+            permissionRequest(requester: permissionRequester, authorizer: authorizer),
+            devices(deviceListing: deviceListing),
             sessionState(provider: cameraStateProvider),
             sessionStart(
                 starter: sessionStarter,
@@ -165,6 +169,43 @@ public enum CameraBridgeRoutes {
             .json(
                 statusCode: 200,
                 body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
+            )
+        }
+    }
+
+    public static func permissionRequest(
+        requester: any CameraPermissionRequesting,
+        authorizer: any BearerTokenAuthorizing
+    ) -> HTTPRoute {
+        HTTPRoute(method: .post, path: "/v1/permissions/request") { request in
+            guard authorizer.isAuthorized(request: request) else {
+                return .unauthorized()
+            }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            let resultBox = PermissionRequestResultBox()
+
+            requester.requestPermission { permissionResult in
+                resultBox.result = permissionResult
+                semaphore.signal()
+            }
+
+            semaphore.wait()
+
+            return .json(
+                statusCode: 200,
+                body: PermissionRequestResponse(
+                    result: resultBox.result ?? .init(status: .denied, prompted: false)
+                )
+            )
+        }
+    }
+
+    public static func devices(deviceListing: any CameraDeviceListing) -> HTTPRoute {
+        HTTPRoute(method: .get, path: "/v1/devices") { _ in
+            .json(
+                statusCode: 200,
+                body: DevicesResponse(devices: deviceListing.availableDevices())
             )
         }
     }
@@ -593,6 +634,40 @@ private struct ErrorResponse: Encodable, Equatable {
 private struct ErrorBody: Encodable, Equatable {
     var code: String
     var message: String
+}
+
+private struct PermissionRequestResponse: Encodable, Equatable {
+    var status: String
+    var prompted: Bool
+
+    init(result: PermissionRequestResult) {
+        self.status = result.status.rawValue
+        self.prompted = result.prompted
+    }
+}
+
+private final class PermissionRequestResultBox: @unchecked Sendable {
+    var result: PermissionRequestResult?
+}
+
+private struct DevicesResponse: Encodable, Equatable {
+    var devices: [DeviceResponse]
+
+    init(devices: [CameraDevice]) {
+        self.devices = devices.map(DeviceResponse.init(device:))
+    }
+}
+
+private struct DeviceResponse: Encodable, Equatable {
+    var id: String
+    var name: String
+    var position: String
+
+    init(device: CameraDevice) {
+        self.id = device.id
+        self.name = device.name
+        self.position = device.position.rawValue
+    }
 }
 
 private struct SessionStateResponse: Encodable, Equatable {

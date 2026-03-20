@@ -39,6 +39,16 @@ public struct CameraDevice: Sendable, Equatable {
     }
 }
 
+public struct PermissionRequestResult: Sendable, Equatable {
+    public var status: PermissionState
+    public var prompted: Bool
+
+    public init(status: PermissionState, prompted: Bool) {
+        self.status = status
+        self.prompted = prompted
+    }
+}
+
 public struct CameraStateError: Error, Sendable, Equatable {
     public let message: String
 
@@ -74,6 +84,10 @@ public struct CameraState: Sendable, Equatable {
 
 public protocol CameraPermissionStatusProviding: Sendable {
     func currentPermissionState() -> PermissionState
+}
+
+public protocol CameraPermissionRequesting: Sendable {
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void)
 }
 
 public protocol CameraStateProviding: Sendable {
@@ -118,6 +132,34 @@ public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatus
     }
 }
 
+public struct AVFoundationCameraPermissionRequester: CameraPermissionRequesting {
+    public init() {}
+
+    public func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        let currentStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        guard currentStatus == .notDetermined else {
+            completion(
+                PermissionRequestResult(
+                    status: PermissionState(authorizationStatus: currentStatus),
+                    prompted: false
+                )
+            )
+            return
+        }
+
+        AVCaptureDevice.requestAccess(for: .video) { _ in
+            completion(
+                PermissionRequestResult(
+                    status: PermissionState(
+                        authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video)
+                    ),
+                    prompted: true
+                )
+            )
+        }
+    }
+}
+
 public struct AVFoundationCameraDeviceListing: CameraDeviceListing {
     public init() {}
 
@@ -156,7 +198,7 @@ public struct DefaultCameraStateProvider: CameraStateProviding {
     }
 }
 
-public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, @unchecked Sendable {
+public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceListing, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, @unchecked Sendable {
     private let deviceListing: any CameraDeviceListing
     private let stateLock = NSLock()
     private var state: CameraState
@@ -173,6 +215,10 @@ public final class DefaultCameraSessionController: CameraStateProviding, CameraD
         stateLock.lock()
         defer { stateLock.unlock() }
         return state
+    }
+
+    public func availableDevices() -> [CameraDevice] {
+        deviceListing.availableDevices()
     }
 
     public func selectDevice(id: String, ownerID: String?) throws -> CameraState {

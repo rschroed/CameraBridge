@@ -105,6 +105,108 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
 }
 
 @Test
+func routerRejectsPermissionRequestWithoutBearerToken() {
+    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController, permissionRequester: requester)
+    let response = router.response(for: HTTPRequest(method: .post, path: "/v1/permissions/request"))
+
+    #expect(response.statusCode == 401)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#
+    )
+    #expect(requester.requestCount == 0)
+}
+
+@Test
+func routerReturnsPermissionRequestResultForAuthorizedRequest() {
+    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController, permissionRequester: requester)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/permissions/request",
+            headers: ["Authorization": "Bearer test-token"]
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":true,"status":"authorized"}"#)
+    #expect(requester.requestCount == 1)
+}
+
+@Test
+func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async throws {
+    let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: makeRouter(
+            sessionController: sessionController,
+            permissionRequester: FixedPermissionRequester(result: .init(status: .denied, prompted: true))
+        )
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    var request = URLRequest(url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/permissions/request")))
+    request.httpMethod = "POST"
+    request.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":true,"status":"denied"}"#)
+}
+
+@Test
+func routerReturnsDeviceListForDeviceRoute() {
+    let devices = [
+        CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+        CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+    ]
+    let sessionController = makeSessionController(devices: devices)
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(for: HTTPRequest(method: .get, path: "/v1/devices"))
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"devices":[{"id":"camera-1","name":"Built-in Camera","position":"front"},{"id":"camera-2","name":"Desk Camera","position":"external"}]}"#
+    )
+}
+
+@Test
+func localHTTPServerReturnsDeviceListWithoutAuth() async throws {
+    let port = try reserveEphemeralPort()
+    let devices = [
+        CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+        CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+    ]
+    let sessionController = makeSessionController(devices: devices)
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: makeRouter(sessionController: sessionController)
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/devices"))
+    let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"devices":[{"id":"camera-1","name":"Built-in Camera","position":"front"},{"id":"camera-2","name":"Desk Camera","position":"external"}]}"#
+    )
+}
+
+@Test
 func routerReturnsSessionStateForSessionRoute() {
     let sessionController = makeSessionController(
         state: CameraState(
@@ -581,11 +683,16 @@ func localHTTPServerSupportsSessionStartThenStop() async throws {
 private func makeRouter(
     sessionController: DefaultCameraSessionController,
     permissionState: PermissionState = .authorized,
+    permissionRequester: any CameraPermissionRequesting = FixedPermissionRequester(
+        result: .init(status: .authorized, prompted: false)
+    ),
     bearerToken: String = "test-token"
 ) -> CameraBridgeRouter {
     CameraBridgeRouter(
         routes: CameraBridgeRoutes.current(
             permissionStatusProvider: FixedPermissionStatusProvider(state: permissionState),
+            permissionRequester: permissionRequester,
+            deviceListing: sessionController,
             cameraStateProvider: sessionController,
             deviceSelector: sessionController,
             sessionStarter: sessionController,
@@ -612,6 +719,28 @@ private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
 
     func currentPermissionState() -> PermissionState {
         state
+    }
+}
+
+private struct FixedPermissionRequester: CameraPermissionRequesting {
+    let result: PermissionRequestResult
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        completion(result)
+    }
+}
+
+private final class RecordingPermissionRequester: CameraPermissionRequesting, @unchecked Sendable {
+    private(set) var requestCount = 0
+    let result: PermissionRequestResult
+
+    init(result: PermissionRequestResult) {
+        self.result = result
+    }
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        requestCount += 1
+        completion(result)
     }
 }
 
