@@ -1,5 +1,6 @@
 import Testing
 @testable import CameraBridgeCore
+import AVFoundation
 
 @Test
 func coreModuleNameMatchesTarget() {
@@ -41,4 +42,12 @@ func cameraStateRetainsExplicitValues() {
     #expect(state.previewState == .running)
     #expect(state.activeDeviceID == "camera-1")
     #expect(state.lastError == error)
+}
+
+@Test
+func permissionStateMapsAVFoundationStatusValues() {
+    #expect(PermissionState(authorizationStatus: .notDetermined) == .notDetermined)
+    #expect(PermissionState(authorizationStatus: .restricted) == .restricted)
+    #expect(PermissionState(authorizationStatus: .denied) == .denied)
+    #expect(PermissionState(authorizationStatus: .authorized) == .authorized)
 }
