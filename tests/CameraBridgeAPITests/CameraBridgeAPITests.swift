@@ -14,13 +14,17 @@ func routerReturnsNotFoundForUnknownRoute() {
     let response = router.response(for: HTTPRequest(method: .get, path: "/missing"))
 
     #expect(response.statusCode == 404)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{ "error": { "code": "not_found", "message": "Route not found" } }"#)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"error":{"code":"not_found","message":"Route not found"}}"#)
 }
 
 @Test
 func routerReturnsHealthResponseForHealthRoute() {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+            permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: true)),
+            authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
 
@@ -34,7 +38,11 @@ func localHTTPServerReturnsHealthResponse() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: true)),
+                authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+            )
         )
     )
 
@@ -55,7 +63,11 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: true)),
+                authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+            )
         )
     )
 
@@ -68,13 +80,17 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let httpResponse = try #require(response as? HTTPURLResponse)
 
     #expect(httpResponse.statusCode == 404)
-    #expect(String(decoding: data, as: UTF8.self) == #"{ "error": { "code": "not_found", "message": "Route not found" } }"#)
+    #expect(String(decoding: data, as: UTF8.self) == #"{"error":{"code":"not_found","message":"Route not found"}}"#)
 }
 
 @Test(arguments: PermissionState.allCases)
 func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: state))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: state),
+            permissionRequester: FixedPermissionRequester(result: .init(status: state, prompted: false)),
+            authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
 
@@ -88,7 +104,11 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
+                permissionRequester: FixedPermissionRequester(result: .init(status: .restricted, prompted: false)),
+                authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+            )
         )
     )
 
@@ -103,11 +123,100 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "restricted" }"#)
 }
 
+@Test
+func routerRejectsPermissionRequestWithoutBearerToken() {
+    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined),
+            permissionRequester: requester,
+            authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+        )
+    )
+    let response = router.response(for: HTTPRequest(method: .post, path: "/v1/permissions/request"))
+
+    #expect(response.statusCode == 401)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#)
+    #expect(requester.requestCount == 0)
+}
+
+@Test
+func routerReturnsPermissionRequestResultForAuthorizedRequest() {
+    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined),
+            permissionRequester: requester,
+            authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+        )
+    )
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/permissions/request",
+            headers: ["Authorization": "Bearer test-token"]
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":true,"status":"authorized"}"#)
+    #expect(requester.requestCount == 1)
+}
+
+@Test
+func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async throws {
+    let port = try reserveEphemeralPort()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined),
+                permissionRequester: FixedPermissionRequester(result: .init(status: .denied, prompted: true)),
+                authorizer: StaticBearerTokenAuthorizer(bearerToken: "test-token")
+            )
+        )
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    var request = URLRequest(url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/permissions/request")))
+    request.httpMethod = "POST"
+    request.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":true,"status":"denied"}"#)
+}
+
 private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
     let state: PermissionState
 
     func currentPermissionState() -> PermissionState {
         state
+    }
+}
+
+private struct FixedPermissionRequester: CameraPermissionRequesting {
+    let result: PermissionRequestResult
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        completion(result)
+    }
+}
+
+private final class RecordingPermissionRequester: CameraPermissionRequesting, @unchecked Sendable {
+    private(set) var requestCount = 0
+    let result: PermissionRequestResult
+
+    init(result: PermissionRequestResult) {
+        self.result = result
+    }
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        requestCount += 1
+        completion(result)
     }
 }
 

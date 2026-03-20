@@ -21,6 +21,16 @@ public enum PreviewState: Sendable, Equatable {
     case running
 }
 
+public struct PermissionRequestResult: Sendable, Equatable {
+    public var status: PermissionState
+    public var prompted: Bool
+
+    public init(status: PermissionState, prompted: Bool) {
+        self.status = status
+        self.prompted = prompted
+    }
+}
+
 public struct CameraStateError: Error, Sendable, Equatable {
     public let message: String
 
@@ -55,11 +65,43 @@ public protocol CameraPermissionStatusProviding: Sendable {
     func currentPermissionState() -> PermissionState
 }
 
+public protocol CameraPermissionRequesting: Sendable {
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void)
+}
+
 public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
     public init() {}
 
     public func currentPermissionState() -> PermissionState {
         PermissionState(authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+}
+
+public struct AVFoundationCameraPermissionRequester: CameraPermissionRequesting {
+    public init() {}
+
+    public func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        let currentStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        guard currentStatus == .notDetermined else {
+            completion(
+                PermissionRequestResult(
+                    status: PermissionState(authorizationStatus: currentStatus),
+                    prompted: false
+                )
+            )
+            return
+        }
+
+        AVCaptureDevice.requestAccess(for: .video) { _ in
+            completion(
+                PermissionRequestResult(
+                    status: PermissionState(
+                        authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video)
+                    ),
+                    prompted: true
+                )
+            )
+        }
     }
 }
 

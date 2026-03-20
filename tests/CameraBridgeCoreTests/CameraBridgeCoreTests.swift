@@ -51,3 +51,11 @@ func permissionStateMapsAVFoundationStatusValues() {
     #expect(PermissionState(authorizationStatus: .denied) == .denied)
     #expect(PermissionState(authorizationStatus: .authorized) == .authorized)
 }
+
+@Test
+func permissionRequestResultRetainsExplicitValues() {
+    let result = PermissionRequestResult(status: .authorized, prompted: true)
+
+    #expect(result.status == .authorized)
+    #expect(result.prompted)
+}

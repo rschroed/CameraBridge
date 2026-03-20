@@ -46,11 +46,47 @@ public struct HTTPResponse: Sendable, Equatable {
         )
     }
 
-    public static func notFound() -> HTTPResponse {
-        .json(
-            statusCode: 404,
-            body: #"{ "error": { "code": "not_found", "message": "Route not found" } }"#
+    public static func json<T: Encodable>(statusCode: Int, body: T) -> HTTPResponse {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try! encoder.encode(body)
+        return HTTPResponse(
+            statusCode: statusCode,
+            headers: ["Content-Type": "application/json"],
+            body: data
         )
+    }
+
+    public static func error(statusCode: Int, code: String, message: String) -> HTTPResponse {
+        .json(statusCode: statusCode, body: ErrorResponse(error: .init(code: code, message: message)))
+    }
+
+    public static func notFound() -> HTTPResponse {
+        .error(statusCode: 404, code: "not_found", message: "Route not found")
+    }
+
+    public static func unauthorized() -> HTTPResponse {
+        .error(statusCode: 401, code: "unauthorized", message: "Bearer token missing or invalid")
+    }
+}
+
+public protocol BearerTokenAuthorizing: Sendable {
+    func isAuthorized(request: HTTPRequest) -> Bool
+}
+
+public struct StaticBearerTokenAuthorizer: BearerTokenAuthorizing {
+    public var bearerToken: String?
+
+    public init(bearerToken: String?) {
+        self.bearerToken = bearerToken
+    }
+
+    public func isAuthorized(request: HTTPRequest) -> Bool {
+        guard let bearerToken, !bearerToken.isEmpty else {
+            return false
+        }
+
+        return request.authorizationBearerToken == bearerToken
     }
 }
 
@@ -92,10 +128,15 @@ public struct CameraBridgeRouter: Sendable {
 }
 
 public enum CameraBridgeRoutes {
-    public static func current(permissionStatusProvider: any CameraPermissionStatusProviding) -> [HTTPRoute] {
+    public static func current(
+        permissionStatusProvider: any CameraPermissionStatusProviding,
+        permissionRequester: any CameraPermissionRequesting,
+        authorizer: any BearerTokenAuthorizing
+    ) -> [HTTPRoute] {
         [
             health(),
             permissionStatus(provider: permissionStatusProvider),
+            permissionRequest(requester: permissionRequester, authorizer: authorizer),
         ]
     }
 
@@ -110,6 +151,34 @@ public enum CameraBridgeRoutes {
             .json(
                 statusCode: 200,
                 body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
+            )
+        }
+    }
+
+    public static func permissionRequest(
+        requester: any CameraPermissionRequesting,
+        authorizer: any BearerTokenAuthorizing
+    ) -> HTTPRoute {
+        HTTPRoute(method: .post, path: "/v1/permissions/request") { request in
+            guard authorizer.isAuthorized(request: request) else {
+                return .unauthorized()
+            }
+
+            let semaphore = DispatchSemaphore(value: 0)
+            let resultBox = PermissionRequestResultBox()
+
+            requester.requestPermission { permissionResult in
+                resultBox.result = permissionResult
+                semaphore.signal()
+            }
+
+            semaphore.wait()
+
+            return .json(
+                statusCode: 200,
+                body: PermissionRequestResponse(
+                    result: resultBox.result ?? .init(status: .denied, prompted: false)
+                )
             )
         }
     }
@@ -352,10 +421,52 @@ private enum HTTPResponseSerializer {
         switch statusCode {
         case 200:
             return "OK"
+        case 401:
+            return "Unauthorized"
         case 404:
             return "Not Found"
         default:
             return "Error"
         }
     }
+}
+
+private extension HTTPRequest {
+    var authorizationBearerToken: String? {
+        guard let authorization = headers.first(where: {
+            $0.key.caseInsensitiveCompare("Authorization") == .orderedSame
+        })?.value else {
+            return nil
+        }
+
+        let prefix = "Bearer "
+        guard authorization.hasPrefix(prefix) else {
+            return nil
+        }
+
+        return String(authorization.dropFirst(prefix.count))
+    }
+}
+
+private struct ErrorResponse: Encodable, Equatable {
+    var error: ErrorBody
+}
+
+private struct ErrorBody: Encodable, Equatable {
+    var code: String
+    var message: String
+}
+
+private struct PermissionRequestResponse: Encodable, Equatable {
+    var status: String
+    var prompted: Bool
+
+    init(result: PermissionRequestResult) {
+        self.status = result.status.rawValue
+        self.prompted = result.prompted
+    }
+}
+
+private final class PermissionRequestResultBox: @unchecked Sendable {
+    var result: PermissionRequestResult?
 }
