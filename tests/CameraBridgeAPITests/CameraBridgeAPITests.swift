@@ -14,17 +14,16 @@ func routerReturnsNotFoundForUnknownRoute() {
     let response = router.response(for: HTTPRequest(method: .get, path: "/missing"))
 
     #expect(response.statusCode == 404)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{ "error": { "code": "not_found", "message": "Route not found" } }"#)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"not_found","message":"Route not found"}}"#
+    )
 }
 
 @Test
 func routerReturnsHealthResponseForHealthRoute() {
-    let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(
-            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
-            cameraStateProvider: FixedCameraStateProvider(state: CameraState())
-        )
-    )
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
 
     #expect(response.statusCode == 200)
@@ -34,14 +33,10 @@ func routerReturnsHealthResponseForHealthRoute() {
 @Test
 func localHTTPServerReturnsHealthResponse() async throws {
     let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
-                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
-            )
-        )
+        router: makeRouter(sessionController: sessionController)
     )
 
     defer { server.stop() }
@@ -58,14 +53,10 @@ func localHTTPServerReturnsHealthResponse() async throws {
 @Test
 func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
-                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
-            )
-        )
+        router: makeRouter(sessionController: sessionController)
     )
 
     defer { server.stop() }
@@ -77,17 +68,16 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let httpResponse = try #require(response as? HTTPURLResponse)
 
     #expect(httpResponse.statusCode == 404)
-    #expect(String(decoding: data, as: UTF8.self) == #"{ "error": { "code": "not_found", "message": "Route not found" } }"#)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"error":{"code":"not_found","message":"Route not found"}}"#
+    )
 }
 
 @Test(arguments: PermissionState.allCases)
 func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
-    let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(
-            permissionStatusProvider: FixedPermissionStatusProvider(state: state),
-            cameraStateProvider: FixedCameraStateProvider(state: CameraState())
-        )
-    )
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController, permissionState: state)
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
 
     #expect(response.statusCode == 200)
@@ -97,14 +87,10 @@ func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
 @Test
 func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
-                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
-            )
-        )
+        router: makeRouter(sessionController: sessionController, permissionState: .restricted)
     )
 
     defer { server.stop() }
@@ -120,20 +106,17 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
 
 @Test
 func routerReturnsSessionStateForSessionRoute() {
-    let state = CameraState(
-        permissionState: .authorized,
-        sessionState: .running,
-        previewState: .stopped,
-        activeDeviceID: "camera-1",
-        currentOwnerID: "client-1",
-        lastError: CameraStateError(message: "session failed")
-    )
-    let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(
-            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
-            cameraStateProvider: FixedCameraStateProvider(state: state)
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: CameraStateError(message: "session failed")
         )
     )
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/session"))
 
     #expect(response.statusCode == 200)
@@ -146,22 +129,19 @@ func routerReturnsSessionStateForSessionRoute() {
 @Test
 func localHTTPServerReturnsSessionStateWithoutAuth() async throws {
     let port = try reserveEphemeralPort()
-    let state = CameraState(
-        permissionState: .restricted,
-        sessionState: .stopped,
-        previewState: .stopped,
-        activeDeviceID: nil,
-        currentOwnerID: nil,
-        lastError: nil
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .restricted,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: nil,
+            currentOwnerID: nil,
+            lastError: nil
+        )
     )
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
-                cameraStateProvider: FixedCameraStateProvider(state: state)
-            )
-        )
+        router: makeRouter(sessionController: sessionController, permissionState: .restricted)
     )
 
     defer { server.stop() }
@@ -178,6 +158,192 @@ func localHTTPServerReturnsSessionStateWithoutAuth() async throws {
     )
 }
 
+@Test
+func routerRejectsDeviceSelectionWithoutBearerToken() {
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            body: Data(#"{"device_id":"camera-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 401)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == nil)
+}
+
+@Test
+func routerRejectsDeviceSelectionWithMalformedRequestBody() {
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data("not-json".utf8)
+        )
+    )
+
+    #expect(response.statusCode == 400)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_request","message":"Request body must be valid JSON"}}"#
+    )
+}
+
+@Test
+func routerRejectsDeviceSelectionForUnknownDevice() {
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1"),
+        devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"device_id":"camera-2"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Requested device is unavailable: camera-2"}}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == "camera-1")
+}
+
+@Test
+func routerRejectsDeviceSelectionForOwnerMismatch() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        ),
+        devices: [
+            CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+        ]
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"device_id":"camera-2","owner_id":"client-2"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"ownership_conflict","message":"Session is owned by client-1"}}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == "camera-1")
+}
+
+@Test
+func routerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() {
+    let sessionController = makeSessionController(
+        devices: [
+            CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+        ]
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"device_id":"camera-2"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"active_device_id":"camera-2","last_error":null,"owner_id":null,"state":"stopped"}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == "camera-2")
+}
+
+@Test
+func localHTTPServerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() async throws {
+    let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController(
+        devices: [
+            CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+        ]
+    )
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: makeRouter(sessionController: sessionController)
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    var request = URLRequest(
+        url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/session/select-device"))
+    )
+    request.httpMethod = "POST"
+    request.httpBody = Data(#"{"device_id":"camera-2"}"#.utf8)
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    let (data, response) = try await URLSession.shared.data(for: request)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"active_device_id":"camera-2","last_error":null,"owner_id":null,"state":"stopped"}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == "camera-2")
+}
+
+private func makeRouter(
+    sessionController: DefaultCameraSessionController,
+    permissionState: PermissionState = .authorized,
+    bearerToken: String = "test-token"
+) -> CameraBridgeRouter {
+    CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: permissionState),
+            cameraStateProvider: sessionController,
+            deviceSelector: sessionController,
+            authorizer: StaticBearerTokenAuthorizer(bearerToken: bearerToken)
+        )
+    )
+}
+
+private func makeSessionController(
+    state: CameraState = CameraState(),
+    devices: [CameraDevice] = [
+        CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+    ]
+) -> DefaultCameraSessionController {
+    DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(devices: devices),
+        initialState: state
+    )
+}
+
 private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
     let state: PermissionState
 
@@ -186,11 +352,11 @@ private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
     }
 }
 
-private struct FixedCameraStateProvider: CameraStateProviding {
-    let state: CameraState
+private struct FixedDeviceListing: CameraDeviceListing {
+    let devices: [CameraDevice]
 
-    func currentCameraState() -> CameraState {
-        state
+    func availableDevices() -> [CameraDevice] {
+        devices
     }
 }
 

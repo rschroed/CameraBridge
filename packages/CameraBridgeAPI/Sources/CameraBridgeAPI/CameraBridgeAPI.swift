@@ -57,11 +57,40 @@ public struct HTTPResponse: Sendable, Equatable {
         )
     }
 
+    public static func error(statusCode: Int, code: String, message: String) -> HTTPResponse {
+        .json(statusCode: statusCode, body: ErrorResponse(error: .init(code: code, message: message)))
+    }
+
     public static func notFound() -> HTTPResponse {
-        .json(
-            statusCode: 404,
-            body: #"{ "error": { "code": "not_found", "message": "Route not found" } }"#
-        )
+        .error(statusCode: 404, code: "not_found", message: "Route not found")
+    }
+
+    public static func badRequest(code: String = "invalid_request", message: String) -> HTTPResponse {
+        .error(statusCode: 400, code: code, message: message)
+    }
+
+    public static func unauthorized() -> HTTPResponse {
+        .error(statusCode: 401, code: "unauthorized", message: "Bearer token missing or invalid")
+    }
+}
+
+public protocol BearerTokenAuthorizing: Sendable {
+    func isAuthorized(request: HTTPRequest) -> Bool
+}
+
+public struct StaticBearerTokenAuthorizer: BearerTokenAuthorizing {
+    public var bearerToken: String?
+
+    public init(bearerToken: String?) {
+        self.bearerToken = bearerToken
+    }
+
+    public func isAuthorized(request: HTTPRequest) -> Bool {
+        guard let bearerToken, !bearerToken.isEmpty else {
+            return false
+        }
+
+        return request.authorizationBearerToken == bearerToken
     }
 }
 
@@ -105,12 +134,15 @@ public struct CameraBridgeRouter: Sendable {
 public enum CameraBridgeRoutes {
     public static func current(
         permissionStatusProvider: any CameraPermissionStatusProviding,
-        cameraStateProvider: any CameraStateProviding
+        cameraStateProvider: any CameraStateProviding,
+        deviceSelector: any CameraDeviceSelecting,
+        authorizer: any BearerTokenAuthorizing
     ) -> [HTTPRoute] {
         [
             health(),
             permissionStatus(provider: permissionStatusProvider),
             sessionState(provider: cameraStateProvider),
+            sessionDeviceSelection(selector: deviceSelector, authorizer: authorizer),
         ]
     }
 
@@ -132,6 +164,51 @@ public enum CameraBridgeRoutes {
     public static func sessionState(provider: any CameraStateProviding) -> HTTPRoute {
         HTTPRoute(method: .get, path: "/v1/session") { _ in
             .json(statusCode: 200, body: SessionStateResponse(state: provider.currentCameraState()))
+        }
+    }
+
+    public static func sessionDeviceSelection(
+        selector: any CameraDeviceSelecting,
+        authorizer: any BearerTokenAuthorizing
+    ) -> HTTPRoute {
+        HTTPRoute(method: .post, path: "/v1/session/select-device") { request in
+            guard authorizer.isAuthorized(request: request) else {
+                return .unauthorized()
+            }
+
+            let selectionRequest: SelectDeviceRequest
+            do {
+                selectionRequest = try JSONDecoder().decode(SelectDeviceRequest.self, from: request.body)
+            } catch {
+                return .badRequest(message: "Request body must be valid JSON")
+            }
+
+            let deviceID = selectionRequest.deviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !deviceID.isEmpty else {
+                return .badRequest(message: "device_id is required")
+            }
+
+            do {
+                let state = try selector.selectDevice(id: deviceID, ownerID: selectionRequest.ownerID)
+                return .json(statusCode: 200, body: SessionStateResponse(state: state))
+            } catch let error as CameraDeviceSelectionError {
+                switch error {
+                case .ownershipConflict(let currentOwnerID):
+                    return .error(
+                        statusCode: 409,
+                        code: "ownership_conflict",
+                        message: "Session is owned by \(currentOwnerID)"
+                    )
+                case .unavailableDevice(let id):
+                    return .error(
+                        statusCode: 409,
+                        code: "invalid_state",
+                        message: "Requested device is unavailable: \(id)"
+                    )
+                }
+            } catch {
+                return .error(statusCode: 409, code: "invalid_state", message: "Device selection failed")
+            }
         }
     }
 }
@@ -371,14 +448,46 @@ private enum HTTPResponseSerializer {
 
     private static func reasonPhrase(for statusCode: Int) -> String {
         switch statusCode {
+        case 400:
+            return "Bad Request"
         case 200:
             return "OK"
+        case 401:
+            return "Unauthorized"
+        case 409:
+            return "Conflict"
         case 404:
             return "Not Found"
         default:
             return "Error"
         }
     }
+}
+
+private extension HTTPRequest {
+    var authorizationBearerToken: String? {
+        guard let authorization = headers.first(where: {
+            $0.key.caseInsensitiveCompare("Authorization") == .orderedSame
+        })?.value else {
+            return nil
+        }
+
+        let prefix = "Bearer "
+        guard authorization.hasPrefix(prefix) else {
+            return nil
+        }
+
+        return String(authorization.dropFirst(prefix.count))
+    }
+}
+
+private struct ErrorResponse: Encodable, Equatable {
+    var error: ErrorBody
+}
+
+private struct ErrorBody: Encodable, Equatable {
+    var code: String
+    var message: String
 }
 
 private struct SessionStateResponse: Encodable, Equatable {
@@ -422,5 +531,15 @@ private struct SessionStateResponse: Encodable, Equatable {
         } else {
             try container.encodeNil(forKey: .lastError)
         }
+    }
+}
+
+private struct SelectDeviceRequest: Decodable, Equatable {
+    var deviceID: String
+    var ownerID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case ownerID = "owner_id"
     }
 }
