@@ -38,7 +38,11 @@ struct CameraBridgeDaemon {
 
     private func defaultRouter() -> CameraBridgeRouter {
         let deviceListing = AVFoundationCameraDeviceListing()
-        let sessionController = DefaultCameraSessionController(deviceListing: deviceListing)
+        let sessionController = DefaultCameraSessionController(
+            deviceListing: deviceListing,
+            photoProducer: AVFoundationStillPhotoProducer(),
+            artifactStore: DefaultPhotoArtifactStore()
+        )
         return CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
                 permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
@@ -46,6 +50,7 @@ struct CameraBridgeDaemon {
                 deviceSelector: sessionController,
                 sessionStarter: sessionController,
                 sessionStopper: sessionController,
+                photoCapturer: sessionController,
                 authorizer: StaticBearerTokenAuthorizer(bearerToken: configuration.authToken)
             )
         )

@@ -138,6 +138,7 @@ public enum CameraBridgeRoutes {
         deviceSelector: any CameraDeviceSelecting,
         sessionStarter: any CameraSessionStarting,
         sessionStopper: any CameraSessionStopping,
+        photoCapturer: any CameraPhotoCapturing,
         authorizer: any BearerTokenAuthorizing
     ) -> [HTTPRoute] {
         [
@@ -151,6 +152,7 @@ public enum CameraBridgeRoutes {
             ),
             sessionStop(stopper: sessionStopper, authorizer: authorizer),
             sessionDeviceSelection(selector: deviceSelector, authorizer: authorizer),
+            photoCapture(capturer: photoCapturer, authorizer: authorizer),
         ]
     }
 
@@ -287,6 +289,38 @@ public enum CameraBridgeRoutes {
             }
         }
     }
+
+    public static func photoCapture(
+        capturer: any CameraPhotoCapturing,
+        authorizer: any BearerTokenAuthorizing
+    ) -> HTTPRoute {
+        HTTPRoute(method: .post, path: "/v1/capture/photo") { request in
+            guard authorizer.isAuthorized(request: request) else {
+                return .unauthorized()
+            }
+
+            let ownerRequest: SessionOwnerRequest
+            do {
+                ownerRequest = try JSONDecoder().decode(SessionOwnerRequest.self, from: request.body)
+            } catch {
+                return .badRequest(message: "Request body must be valid JSON")
+            }
+
+            let ownerID = ownerRequest.ownerID.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !ownerID.isEmpty else {
+                return .badRequest(message: "owner_id is required")
+            }
+
+            do {
+                let artifact = try capturer.capturePhoto(ownerID: ownerID)
+                return .json(statusCode: 200, body: PhotoCaptureResponse(artifact: artifact))
+            } catch let error as CameraPhotoCaptureError {
+                return photoCaptureErrorResponse(error)
+            } catch {
+                return .error(statusCode: 500, code: "capture_failed", message: "Photo capture failed")
+            }
+        }
+    }
 }
 
 private func sessionLifecycleErrorResponse(_ error: CameraSessionLifecycleError) -> HTTPResponse {
@@ -315,6 +349,35 @@ private func sessionLifecycleErrorResponse(_ error: CameraSessionLifecycleError)
         return .error(statusCode: 409, code: "invalid_state", message: "Session is already stopped")
     case .missingOwner:
         return .error(statusCode: 409, code: "invalid_state", message: "Running session has no owner")
+    }
+}
+
+private func photoCaptureErrorResponse(_ error: CameraPhotoCaptureError) -> HTTPResponse {
+    switch error {
+    case .ownershipConflict(let currentOwnerID):
+        return .error(
+            statusCode: 409,
+            code: "ownership_conflict",
+            message: "Session is owned by \(currentOwnerID)"
+        )
+    case .sessionNotRunning:
+        return .error(statusCode: 409, code: "invalid_state", message: "Session is not running")
+    case .missingOwner:
+        return .error(statusCode: 409, code: "invalid_state", message: "Running session has no owner")
+    case .missingActiveDevice:
+        return .error(
+            statusCode: 409,
+            code: "invalid_state",
+            message: "Cannot capture photo without an active device"
+        )
+    case .unavailableDevice(let id):
+        return .error(
+            statusCode: 409,
+            code: "invalid_state",
+            message: "Requested device is unavailable: \(id)"
+        )
+    case .captureFailed(let message):
+        return .error(statusCode: 500, code: "capture_failed", message: message)
     }
 }
 
@@ -639,6 +702,24 @@ private struct SessionStateResponse: Encodable, Equatable {
     }
 }
 
+private struct PhotoCaptureResponse: Encodable, Equatable {
+    var localPath: String
+    var capturedAt: String
+    var deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case localPath = "local_path"
+        case capturedAt = "captured_at"
+        case deviceID = "device_id"
+    }
+
+    init(artifact: CapturedPhotoArtifact) {
+        self.localPath = artifact.localPath
+        self.capturedAt = iso8601Timestamp(artifact.capturedAt)
+        self.deviceID = artifact.deviceID
+    }
+}
+
 private struct SelectDeviceRequest: Decodable, Equatable {
     var deviceID: String
     var ownerID: String?
@@ -655,4 +736,10 @@ private struct SessionOwnerRequest: Decodable, Equatable {
     enum CodingKeys: String, CodingKey {
         case ownerID = "owner_id"
     }
+}
+
+private func iso8601Timestamp(_ date: Date) -> String {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter.string(from: date)
 }

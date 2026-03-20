@@ -1,6 +1,7 @@
+import AVFoundation
+import Foundation
 import Testing
 @testable import CameraBridgeCore
-import AVFoundation
 
 @Test
 func coreModuleNameMatchesTarget() {
@@ -355,10 +356,169 @@ func defaultCameraSessionControllerRejectsStopForOwnerMismatch() {
     #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is owned by client-1"))
 }
 
+@Test
+func defaultPhotoArtifactStoreWritesPhotoDataToConfiguredDirectory() throws {
+    let directoryURL = makeTemporaryDirectory()
+    let store = DefaultPhotoArtifactStore(baseDirectoryURL: directoryURL)
+    let capturedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
+    let data = Data([0xFF, 0xD8, 0xFF, 0xD9])
+
+    let fileURL = try store.storePhotoData(data, deviceID: "camera-1", capturedAt: capturedAt)
+
+    #expect(fileURL.path.hasPrefix(directoryURL.path))
+    #expect(fileURL.pathExtension == "jpg")
+    #expect(try Data(contentsOf: fileURL) == data)
+}
+
+@Test
+func defaultCameraSessionControllerCapturesPhotoForRunningOwnedSession() throws {
+    let directoryURL = makeTemporaryDirectory()
+    let capturedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
+    let expectedData = Data([0x01, 0x02, 0x03, 0x04])
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
+        ),
+        photoProducer: FixedStillPhotoProducer(data: expectedData),
+        artifactStore: DefaultPhotoArtifactStore(baseDirectoryURL: directoryURL),
+        now: { capturedAt },
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    let artifact = try controller.capturePhoto(ownerID: "client-1")
+
+    #expect(artifact.deviceID == "camera-1")
+    #expect(artifact.capturedAt == capturedAt)
+    #expect(artifact.localPath.hasPrefix(directoryURL.path))
+    #expect(try Data(contentsOf: URL(fileURLWithPath: artifact.localPath)) == expectedData)
+    #expect(controller.currentCameraState().lastError == nil)
+}
+
+@Test
+func defaultCameraSessionControllerRejectsCaptureWhenSessionIsStopped() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.capturePhoto(ownerID: "client-1")
+        Issue.record("Expected photo capture on stopped session to fail")
+    } catch let error as CameraPhotoCaptureError {
+        #expect(error == .sessionNotRunning)
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is not running"))
+}
+
+@Test
+func defaultCameraSessionControllerRejectsCaptureForOwnerMismatch() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.capturePhoto(ownerID: "client-2")
+        Issue.record("Expected photo capture owner mismatch to fail")
+    } catch let error as CameraPhotoCaptureError {
+        #expect(error == .ownershipConflict(currentOwnerID: "client-1"))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is owned by client-1"))
+}
+
+@Test
+func defaultCameraSessionControllerRetainsCaptureFailureAsLastError() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
+        ),
+        photoProducer: FailingStillPhotoProducer(
+            error: .captureFailed(message: "AVFoundation timed out")
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.capturePhoto(ownerID: "client-1")
+        Issue.record("Expected photo capture failure to surface producer error")
+    } catch let error as CameraPhotoCaptureError {
+        #expect(error == .captureFailed(message: "AVFoundation timed out"))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "AVFoundation timed out"))
+}
+
 private struct FixedDeviceListing: CameraDeviceListing {
     let devices: [CameraDevice]
 
     func availableDevices() -> [CameraDevice] {
         devices
     }
+}
+
+private struct FixedStillPhotoProducer: CameraStillPhotoProducing {
+    let data: Data
+
+    func capturePhotoData(deviceID: String) throws -> Data {
+        data
+    }
+}
+
+private struct FailingStillPhotoProducer: CameraStillPhotoProducing {
+    let error: CameraPhotoCaptureError
+
+    func capturePhotoData(deviceID: String) throws -> Data {
+        throw error
+    }
+}
+
+private func makeTemporaryDirectory() -> URL {
+    let directoryURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        .appendingPathComponent("CameraBridgeCoreTests-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(
+        at: directoryURL,
+        withIntermediateDirectories: true,
+        attributes: nil
+    )
+    return directoryURL
 }
