@@ -92,13 +92,25 @@ public struct CameraBridgeRouter: Sendable {
 }
 
 public enum CameraBridgeRoutes {
-    public static func current() -> [HTTPRoute] {
-        [health()]
+    public static func current(permissionStatusProvider: any CameraPermissionStatusProviding) -> [HTTPRoute] {
+        [
+            health(),
+            permissionStatus(provider: permissionStatusProvider),
+        ]
     }
 
     public static func health() -> HTTPRoute {
         HTTPRoute(method: .get, path: "/health") { _ in
             .json(statusCode: 200, body: #"{ "status": "ok" }"#)
+        }
+    }
+
+    public static func permissionStatus(provider: any CameraPermissionStatusProviding) -> HTTPRoute {
+        HTTPRoute(method: .get, path: "/v1/permissions") { _ in
+            .json(
+                statusCode: 200,
+                body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
+            )
         }
     }
 }

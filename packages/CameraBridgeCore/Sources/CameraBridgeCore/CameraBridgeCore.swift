@@ -1,3 +1,5 @@
+import AVFoundation
+
 public enum CameraBridgeCoreModule {
     public static let name = "CameraBridgeCore"
 }
@@ -46,5 +48,34 @@ public struct CameraState: Sendable, Equatable {
         self.previewState = previewState
         self.activeDeviceID = activeDeviceID
         self.lastError = lastError
+    }
+}
+
+public protocol CameraPermissionStatusProviding: Sendable {
+    func currentPermissionState() -> PermissionState
+}
+
+public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
+    public init() {}
+
+    public func currentPermissionState() -> PermissionState {
+        PermissionState(authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+}
+
+extension PermissionState {
+    init(authorizationStatus: AVAuthorizationStatus) {
+        switch authorizationStatus {
+        case .notDetermined:
+            self = .notDetermined
+        case .restricted:
+            self = .restricted
+        case .denied:
+            self = .denied
+        case .authorized:
+            self = .authorized
+        @unknown default:
+            self = .denied
+        }
     }
 }
