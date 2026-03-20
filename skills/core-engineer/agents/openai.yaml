@@ -1,0 +1,4 @@
+interface:
+  display_name: "Core Engineer"
+  short_description: "Build CameraBridgeCore correctly and narrowly."
+  default_prompt: "Use $core-engineer to implement or review CameraBridgeCore changes so state, permissions, device modeling, session lifecycle, and tests stay explicit and hardware-free."

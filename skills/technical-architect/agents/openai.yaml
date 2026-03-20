@@ -1,0 +1,4 @@
+interface:
+  display_name: "Technical Architect"
+  short_description: "Protect CameraBridge architecture and scope."
+  default_prompt: "Use $technical-architect to review or shape this change so it preserves CameraBridge boundaries, explicit state ownership, and v1 scope guardrails."

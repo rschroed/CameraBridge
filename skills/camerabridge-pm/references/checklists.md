@@ -12,7 +12,7 @@ Use these checks to keep product recommendations aligned with the repository.
 
 - Can the work land as one focused PR?
 - Are files touched limited to the relevant package, app target, docs path, or repo-local tooling path?
-- If the work is workflow tooling, is it isolated under a dedicated path such as `skills/` or `.codex/`?
+- If the work is workflow tooling, is it isolated under `skills/`?
 - Are tests or manual verification notes defined?
 - Is deferred work listed explicitly?
 
@@ -39,3 +39,4 @@ Use these checks to keep product recommendations aligned with the repository.
 - roadmap or API docs updated if the public contract changed
 - tests pass or manual verification is documented
 - no architecture drift across Core, API, daemon, app, docs, and workflow assets
+- any repo-local workflow assets live under `skills/` when they are part of the repository

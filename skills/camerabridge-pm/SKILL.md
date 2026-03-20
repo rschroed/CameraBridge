@@ -16,7 +16,7 @@ Read [references/checklists.md](references/checklists.md) before making non-triv
 
 Restate the requested outcome in repository terms before proposing scope.
 Prefer the smallest complete slice that can merge safely.
-Treat repo-local workflow assets as valid repository work when they are clearly not runtime code and live in a dedicated path such as `skills/` or `.codex/`.
+Treat repo-local workflow assets as valid repository work when they are clearly not runtime code and live in a dedicated path such as `skills/`.
 Call out what is deferred and what does not belong in v1.
 
 ## Product Workflow
@@ -28,6 +28,19 @@ Call out what is deferred and what does not belong in v1.
 5. Name the tests, manual verification, and docs updates required for the slice.
 
 If the request conflicts with repository guardrails, choose the narrower implementation and say why.
+If package placement, state ownership, or architecture is ambiguous, hand that question to `technical-architect` instead of resolving it implicitly in product language.
+
+## What PM Owns
+
+Own PRDs, scope framing, roadmap and milestone shaping, slice definition, acceptance criteria, and PR packaging guidance.
+Own the decision about what is in scope now, what is deferred, and what must be documented for review or release.
+Own coordination across product code, docs, examples, and repo-local workflow assets when they support delivery.
+
+## What PM Must Not Own
+
+Do not invent implementation details that belong to Core, API, app, or daemon skills.
+Do not overrule architecture boundaries with product language.
+Do not hide mixed-scope branches or incomplete verification behind tidy summaries.
 
 ## Output Expectations
 
@@ -46,3 +59,4 @@ Reject recommendations that expand into microphone support, virtual cameras, rem
 Require public API changes to define auth, ownership, preconditions, expected errors, and docs impact.
 Require tests for new Core logic and endpoints when feasible, and manual verification notes for docs or tooling-only changes.
 Prefer truthful PRs over tidy narratives: if the branch contains unrelated commits, disclose that explicitly.
+Prefer `skills/` for repo-local workflow assets instead of ad hoc locations.

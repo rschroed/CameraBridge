@@ -1,0 +1,4 @@
+interface:
+  display_name: "API Engineer"
+  short_description: "Build CameraBridgeAPI cleanly and explicitly."
+  default_prompt: "Use $api-engineer to implement or review CameraBridgeAPI changes so endpoints, auth, error handling, and tests stay explicit, versioned, and aligned with Core ownership."
