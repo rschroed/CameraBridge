@@ -598,6 +598,132 @@ func routerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() {
 }
 
 @Test
+func routerRejectsPhotoCaptureWithoutBearerToken() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/capture/photo",
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 401)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#
+    )
+}
+
+@Test
+func routerRejectsPhotoCaptureWhenSessionIsStopped() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/capture/photo",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Session is not running"}}"#
+    )
+}
+
+@Test
+func routerRejectsPhotoCaptureForOwnerMismatch() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/capture/photo",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-2"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"ownership_conflict","message":"Session is owned by client-1"}}"#
+    )
+}
+
+@Test
+func routerReturnsPhotoCaptureMetadataForAuthorizedOwner() throws {
+    let directoryURL = makeTemporaryDirectory()
+    let capturedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        ),
+        photoProducer: FixedStillPhotoProducer(data: Data([0x01, 0x02, 0x03])),
+        artifactStore: DefaultPhotoArtifactStore(baseDirectoryURL: directoryURL),
+        now: { capturedAt }
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/capture/photo",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 200)
+
+    let payload = try #require(
+        JSONSerialization.jsonObject(with: response.body) as? [String: String]
+    )
+    let localPath = try #require(payload["local_path"])
+    #expect(payload["device_id"] == "camera-1")
+    #expect(payload["captured_at"] == "2024-03-09T16:00:00.123Z")
+    #expect(localPath.hasPrefix(directoryURL.path))
+    #expect(localPath.hasSuffix(".jpg"))
+    #expect(FileManager.default.fileExists(atPath: localPath))
+}
+
+@Test
 func localHTTPServerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() async throws {
     let port = try reserveEphemeralPort()
     let sessionController = makeSessionController(
@@ -697,6 +823,7 @@ private func makeRouter(
             deviceSelector: sessionController,
             sessionStarter: sessionController,
             sessionStopper: sessionController,
+            photoCapturer: sessionController,
             authorizer: StaticBearerTokenAuthorizer(bearerToken: bearerToken)
         )
     )
@@ -706,10 +833,19 @@ private func makeSessionController(
     state: CameraState = CameraState(),
     devices: [CameraDevice] = [
         CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
-    ]
+    ],
+    photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+    artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(
+        baseDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("CameraBridgeAPITests", isDirectory: true)
+    ),
+    now: @escaping @Sendable () -> Date = { Date() }
 ) -> DefaultCameraSessionController {
     DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(devices: devices),
+        photoProducer: photoProducer,
+        artifactStore: artifactStore,
+        now: now,
         initialState: state
     )
 }
@@ -750,6 +886,25 @@ private struct FixedDeviceListing: CameraDeviceListing {
     func availableDevices() -> [CameraDevice] {
         devices
     }
+}
+
+private struct FixedStillPhotoProducer: CameraStillPhotoProducing {
+    let data: Data
+
+    func capturePhotoData(deviceID: String) throws -> Data {
+        data
+    }
+}
+
+private func makeTemporaryDirectory() -> URL {
+    let directoryURL = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+        .appendingPathComponent("CameraBridgeAPITests-\(UUID().uuidString)", isDirectory: true)
+    try! FileManager.default.createDirectory(
+        at: directoryURL,
+        withIntermediateDirectories: true,
+        attributes: nil
+    )
+    return directoryURL
 }
 
 private func reserveEphemeralPort() throws -> UInt16 {

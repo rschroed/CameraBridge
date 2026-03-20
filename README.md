@@ -14,8 +14,8 @@ This repository is intentionally scaffolded with strict package boundaries:
 
 The repository currently includes early daemon and API slices for health,
 permission status and request, device listing and selection, session state,
-and basic session lifecycle control, with the remaining v1 surface defined in
-the docs.
+basic session lifecycle control, and still photo capture with local artifact
+metadata, with the remaining v1 surface defined in the docs.
 
 ## v1 Auth And Ownership
 

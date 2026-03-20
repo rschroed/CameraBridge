@@ -1,4 +1,5 @@
 import AVFoundation
+import Foundation
 
 public enum CameraBridgeCoreModule {
     public static let name = "CameraBridgeCore"
@@ -110,6 +111,10 @@ public protocol CameraSessionStopping: Sendable {
     func stopSession(ownerID: String) throws -> CameraState
 }
 
+public protocol CameraPhotoCapturing: Sendable {
+    func capturePhoto(ownerID: String) throws -> CapturedPhotoArtifact
+}
+
 public enum CameraDeviceSelectionError: Error, Sendable, Equatable {
     case ownershipConflict(currentOwnerID: String)
     case unavailableDevice(id: String)
@@ -122,6 +127,35 @@ public enum CameraSessionLifecycleError: Error, Sendable, Equatable {
     case alreadyRunning
     case alreadyStopped
     case missingOwner
+}
+
+public struct CapturedPhotoArtifact: Sendable, Equatable {
+    public var localPath: String
+    public var capturedAt: Date
+    public var deviceID: String
+
+    public init(localPath: String, capturedAt: Date, deviceID: String) {
+        self.localPath = localPath
+        self.capturedAt = capturedAt
+        self.deviceID = deviceID
+    }
+}
+
+public enum CameraPhotoCaptureError: Error, Sendable, Equatable {
+    case ownershipConflict(currentOwnerID: String)
+    case sessionNotRunning
+    case missingOwner
+    case missingActiveDevice
+    case unavailableDevice(id: String)
+    case captureFailed(message: String)
+}
+
+public protocol CameraStillPhotoProducing: Sendable {
+    func capturePhotoData(deviceID: String) throws -> Data
+}
+
+public protocol PhotoArtifactStoring: Sendable {
+    func storePhotoData(_ data: Data, deviceID: String, capturedAt: Date) throws -> URL
 }
 
 public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
@@ -186,6 +220,122 @@ public struct AVFoundationCameraDeviceListing: CameraDeviceListing {
     }
 }
 
+public struct DefaultPhotoArtifactStore: PhotoArtifactStoring {
+    public var baseDirectoryURL: URL
+
+    public init(baseDirectoryURL: URL? = nil) {
+        self.baseDirectoryURL = baseDirectoryURL ?? Self.defaultBaseDirectoryURL()
+    }
+
+    public func storePhotoData(_ data: Data, deviceID: String, capturedAt: Date) throws -> URL {
+        try FileManager.default.createDirectory(
+            at: baseDirectoryURL,
+            withIntermediateDirectories: true,
+            attributes: nil
+        )
+
+        let fileURL = baseDirectoryURL.appendingPathComponent(
+            "capture-\(Self.filenameTimestamp(from: capturedAt))-\(UUID().uuidString.lowercased()).jpg",
+            isDirectory: false
+        )
+        try data.write(to: fileURL, options: .atomic)
+        return fileURL
+    }
+
+    private static func defaultBaseDirectoryURL() -> URL {
+        let applicationSupportURL =
+            FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ??
+            URL(fileURLWithPath: NSHomeDirectory())
+                .appendingPathComponent("Library/Application Support", isDirectory: true)
+        return applicationSupportURL
+            .appendingPathComponent("CameraBridge", isDirectory: true)
+            .appendingPathComponent("Captures", isDirectory: true)
+    }
+
+    private static func filenameTimestamp(from date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyyMMdd'T'HHmmssSSS'Z'"
+        return formatter.string(from: date)
+    }
+}
+
+public struct UnimplementedStillPhotoProducer: CameraStillPhotoProducing {
+    public init() {}
+
+    public func capturePhotoData(deviceID: String) throws -> Data {
+        throw CameraPhotoCaptureError.captureFailed(message: "Still photo capture is not configured")
+    }
+}
+
+public struct AVFoundationStillPhotoProducer: CameraStillPhotoProducing {
+    public var timeout: TimeInterval
+
+    public init(timeout: TimeInterval = 10) {
+        self.timeout = timeout
+    }
+
+    public func capturePhotoData(deviceID: String) throws -> Data {
+        guard let device = discoverDevice(id: deviceID) else {
+            throw CameraPhotoCaptureError.unavailableDevice(id: deviceID)
+        }
+
+        let session = AVCaptureSession()
+        session.beginConfiguration()
+        session.sessionPreset = .photo
+
+        let input: AVCaptureDeviceInput
+        do {
+            input = try AVCaptureDeviceInput(device: device)
+        } catch {
+            throw CameraPhotoCaptureError.captureFailed(message: "Unable to create AVCaptureDeviceInput")
+        }
+
+        guard session.canAddInput(input) else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Unable to add camera input to capture session")
+        }
+
+        let output = AVCapturePhotoOutput()
+        guard session.canAddOutput(output) else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Unable to add photo output to capture session")
+        }
+
+        session.addInput(input)
+        session.addOutput(output)
+        session.commitConfiguration()
+        session.startRunning()
+        defer { session.stopRunning() }
+
+        let delegate = StillPhotoCaptureDelegate()
+        let settings: AVCapturePhotoSettings
+        if output.availablePhotoCodecTypes.contains(.jpeg) {
+            settings = AVCapturePhotoSettings(format: [AVVideoCodecKey: AVVideoCodecType.jpeg])
+        } else {
+            settings = AVCapturePhotoSettings()
+        }
+
+        output.capturePhoto(with: settings, delegate: delegate)
+        return try delegate.waitForPhotoData(timeout: timeout)
+    }
+
+    private func discoverDevice(id: String) -> AVCaptureDevice? {
+        AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInWideAngleCamera,
+                .continuityCamera,
+                .deskViewCamera,
+                .external,
+            ],
+            mediaType: .video,
+            position: .unspecified
+        )
+        .devices
+        .first(where: { $0.uniqueID == id })
+    }
+}
+
 public struct DefaultCameraStateProvider: CameraStateProviding {
     public var state: CameraState
 
@@ -198,16 +348,25 @@ public struct DefaultCameraStateProvider: CameraStateProviding {
     }
 }
 
-public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceListing, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, @unchecked Sendable {
+public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceListing, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, CameraPhotoCapturing, @unchecked Sendable {
     private let deviceListing: any CameraDeviceListing
+    private let photoProducer: any CameraStillPhotoProducing
+    private let artifactStore: any PhotoArtifactStoring
+    private let now: @Sendable () -> Date
     private let stateLock = NSLock()
     private var state: CameraState
 
     public init(
         deviceListing: any CameraDeviceListing,
+        photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+        artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(),
+        now: @escaping @Sendable () -> Date = { Date() },
         initialState: CameraState = CameraState()
     ) {
         self.deviceListing = deviceListing
+        self.photoProducer = photoProducer
+        self.artifactStore = artifactStore
+        self.now = now
         self.state = initialState
     }
 
@@ -306,6 +465,62 @@ public final class DefaultCameraSessionController: CameraStateProviding, CameraD
         state.lastError = nil
         return state
     }
+
+    public func capturePhoto(ownerID: String) throws -> CapturedPhotoArtifact {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        guard state.sessionState == .running else {
+            let error = CameraPhotoCaptureError.sessionNotRunning
+            state.lastError = CameraStateError(message: error.message)
+            throw error
+        }
+
+        guard let currentOwnerID = state.currentOwnerID else {
+            let error = CameraPhotoCaptureError.missingOwner
+            state.lastError = CameraStateError(message: error.message)
+            throw error
+        }
+
+        guard currentOwnerID == ownerID else {
+            let error = CameraPhotoCaptureError.ownershipConflict(currentOwnerID: currentOwnerID)
+            state.lastError = CameraStateError(message: error.message)
+            throw error
+        }
+
+        guard let activeDeviceID = state.activeDeviceID else {
+            let error = CameraPhotoCaptureError.missingActiveDevice
+            state.lastError = CameraStateError(message: error.message)
+            throw error
+        }
+
+        let capturedAt = now()
+
+        do {
+            let data = try photoProducer.capturePhotoData(deviceID: activeDeviceID)
+            let fileURL = try artifactStore.storePhotoData(
+                data,
+                deviceID: activeDeviceID,
+                capturedAt: capturedAt
+            )
+            let artifact = CapturedPhotoArtifact(
+                localPath: fileURL.path,
+                capturedAt: capturedAt,
+                deviceID: activeDeviceID
+            )
+            state.lastError = nil
+            return artifact
+        } catch let error as CameraPhotoCaptureError {
+            state.lastError = CameraStateError(message: error.message)
+            throw error
+        } catch {
+            let captureError = CameraPhotoCaptureError.captureFailed(
+                message: error.localizedDescription
+            )
+            state.lastError = CameraStateError(message: captureError.message)
+            throw captureError
+        }
+    }
 }
 
 extension PermissionState {
@@ -347,5 +562,77 @@ private extension CameraDevice {
             name: device.localizedName,
             position: CameraDevicePosition(position: device.position)
         )
+    }
+}
+
+private extension CameraPhotoCaptureError {
+    var message: String {
+        switch self {
+        case .ownershipConflict(let currentOwnerID):
+            return "Session is owned by \(currentOwnerID)"
+        case .sessionNotRunning:
+            return "Session is not running"
+        case .missingOwner:
+            return "Running session has no owner"
+        case .missingActiveDevice:
+            return "Cannot capture photo without an active device"
+        case .unavailableDevice(let id):
+            return "Requested device is unavailable: \(id)"
+        case .captureFailed(let message):
+            return message
+        }
+    }
+}
+
+private final class StillPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private let semaphore = DispatchSemaphore(value: 0)
+    private var result: Result<Data, CameraPhotoCaptureError>?
+
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishProcessingPhoto photo: AVCapturePhoto,
+        error: Error?
+    ) {
+        if let error {
+            complete(with: .failure(.captureFailed(message: error.localizedDescription)))
+            return
+        }
+
+        guard let data = photo.fileDataRepresentation() else {
+            complete(with: .failure(.captureFailed(message: "AVFoundation did not produce photo data")))
+            return
+        }
+
+        complete(with: .success(data))
+    }
+
+    func waitForPhotoData(timeout: TimeInterval) throws -> Data {
+        let waitResult = semaphore.wait(timeout: .now() + timeout)
+        guard waitResult == .success else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Photo capture timed out")
+        }
+
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let result else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Photo capture finished without a result")
+        }
+
+        return try result.get()
+    }
+
+    private func complete(with result: Result<Data, CameraPhotoCaptureError>) {
+        lock.lock()
+        let shouldSignal = self.result == nil
+        if shouldSignal {
+            self.result = result
+        }
+        lock.unlock()
+
+        if shouldSignal {
+            semaphore.signal()
+        }
     }
 }
