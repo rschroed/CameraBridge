@@ -12,7 +12,19 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The initial scaffold does not include camera, API, or UI implementation yet.
+The repository currently includes the earliest daemon and API slices, with the
+remaining v1 surface defined in the docs.
+
+## v1 Auth And Ownership
+
+CameraBridge v1 keeps the trust model intentionally narrow:
+
+- read-only localhost endpoints may remain unauthenticated in the early v1 slices
+- planned mutating endpoints use a bearer token or equivalent local secret
+- v1 does not add separate session `claim` or `release` endpoints
+- successful `POST /v1/session/start` establishes implicit session ownership
+- session ownership is released by `POST /v1/session/stop` or when the session ends
+- ownership-conflict and invalid-state failures are explicit parts of the planned contract
 
 ## Docs
 
