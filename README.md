@@ -19,6 +19,7 @@ The initial scaffold does not include camera, API, or UI implementation yet.
 - [Architecture Overview](docs/architecture-overview.md)
 - [v1 Roadmap](docs/roadmap/v1.md)
 - [API v1 Contract](docs/api/v1.md)
+- [Engineering Workflow](docs/workflow.md)
 
 ## Build
 

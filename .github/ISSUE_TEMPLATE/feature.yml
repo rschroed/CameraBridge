@@ -1,0 +1,55 @@
+name: Feature Slice
+description: Define one focused implementation slice.
+title: "[Feature]: "
+labels:
+  - feature
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem To Solve
+      description: Explain the user or system need behind this slice.
+      placeholder: Local apps need a stable way to request permission status over the localhost API.
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Describe the smallest complete slice that should land in one PR.
+      placeholder: Add a read-only permission status endpoint under /v1 and the supporting core abstraction.
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Capture architecture, product boundary, or v1 scope guardrails that matter here.
+      placeholder: Keep AVFoundation logic in CameraBridgeCore. Do not add microphone support or multi-session logic.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List concrete conditions that define done.
+      placeholder: |
+        - New endpoint is documented
+        - Handler tests cover success and failure cases
+        - No unrelated API routes are added
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Explain how this slice should be validated.
+      placeholder: Run swift build, swift test, and include any manual verification notes if UI changes are involved.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out Of Scope
+      description: Record adjacent ideas that should be deferred.
+      placeholder: Do not add session claim/release or preview transport in this issue.
