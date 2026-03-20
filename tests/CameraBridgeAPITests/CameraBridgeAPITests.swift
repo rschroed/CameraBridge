@@ -20,7 +20,10 @@ func routerReturnsNotFoundForUnknownRoute() {
 @Test
 func routerReturnsHealthResponseForHealthRoute() {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+            deviceListing: FixedDeviceListing(devices: [])
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
 
@@ -34,7 +37,10 @@ func localHTTPServerReturnsHealthResponse() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                deviceListing: FixedDeviceListing(devices: [])
+            )
         )
     )
 
@@ -55,7 +61,10 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                deviceListing: FixedDeviceListing(devices: [])
+            )
         )
     )
 
@@ -74,7 +83,10 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
 @Test(arguments: PermissionState.allCases)
 func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: state))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: state),
+            deviceListing: FixedDeviceListing(devices: [])
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
 
@@ -88,7 +100,10 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
+                deviceListing: FixedDeviceListing(devices: [])
+            )
         )
     )
 
@@ -103,11 +118,71 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "restricted" }"#)
 }
 
+@Test
+func routerReturnsDeviceListForDeviceRoute() {
+    let devices = [
+        CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+        CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+    ]
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+            deviceListing: FixedDeviceListing(devices: devices)
+        )
+    )
+    let response = router.response(for: HTTPRequest(method: .get, path: "/v1/devices"))
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"devices":[{"id":"camera-1","name":"Built-in Camera","position":"front"},{"id":"camera-2","name":"Desk Camera","position":"external"}]}"#
+    )
+}
+
+@Test
+func localHTTPServerReturnsDeviceListWithoutAuth() async throws {
+    let port = try reserveEphemeralPort()
+    let devices = [
+        CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+        CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+    ]
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                deviceListing: FixedDeviceListing(devices: devices)
+            )
+        )
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/devices"))
+    let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"devices":[{"id":"camera-1","name":"Built-in Camera","position":"front"},{"id":"camera-2","name":"Desk Camera","position":"external"}]}"#
+    )
+}
+
 private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
     let state: PermissionState
 
     func currentPermissionState() -> PermissionState {
         state
+    }
+}
+
+private struct FixedDeviceListing: CameraDeviceListing {
+    let devices: [CameraDevice]
+
+    func availableDevices() -> [CameraDevice] {
+        devices
     }
 }
 
