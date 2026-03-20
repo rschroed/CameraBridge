@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CameraBridge | Native macOS camera access over localhost</title>
+    <meta
+      name="description"
+      content="CameraBridge is a local macOS camera service that exposes AVFoundation over a stable localhost API for apps, scripts, and local web tools."
+    />
+    <meta
+      property="og:title"
+      content="CameraBridge | Native macOS camera access over localhost"
+    />
+    <meta
+      property="og:description"
+      content="A narrow local macOS camera service with explicit permissions, device discovery, session control, and still capture."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://rschroed.github.io/CameraBridge/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="CameraBridge | Native macOS camera access over localhost"
+    />
+    <meta
+      name="twitter:description"
+      content="Local macOS camera access for apps and scripts without embedding AVFoundation."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <nav class="topbar" aria-label="Primary">
+          <a class="brand" href="#top">CameraBridge</a>
+          <div class="nav-links">
+            <a href="#how-it-works">How it works</a>
+            <a href="#v1">v1</a>
+            <a href="#example">Example</a>
+          </div>
+        </nav>
+
+        <section class="hero-content" id="top">
+          <p class="eyebrow">Local-only macOS camera service</p>
+          <h1>Native macOS camera access over localhost.</h1>
+          <p class="hero-copy">
+            CameraBridge exposes AVFoundation through a small, versioned local
+            API so desktop apps, local web tools, and scripts can use the camera
+            without embedding native macOS code.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/rschroed/CameraBridge"
+              >View on GitHub</a
+            >
+            <a class="button button-secondary" href="https://github.com/rschroed/CameraBridge/blob/main/README.md"
+              >Read the README</a
+            >
+          </div>
+          <ul class="hero-points" aria-label="Highlights">
+            <li>Explicit camera permission state</li>
+            <li>Localhost API for device and session control</li>
+            <li>Still photo capture with local artifact metadata</li>
+          </ul>
+        </section>
+      </header>
+
+      <main>
+        <section class="section problem">
+          <div class="section-heading">
+            <p class="section-label">Why this exists</p>
+            <h2>Keep AVFoundation out of every host app.</h2>
+          </div>
+          <div class="grid grid-three">
+            <article class="card">
+              <h3>Native glue is expensive</h3>
+              <p>
+                Local apps and tools should not each reinvent camera discovery,
+                permission handling, and session lifecycle in native macOS code.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Permission state should be explicit</h3>
+              <p>
+                CameraBridge centralizes camera permission visibility and request
+                flow in a trusted local process instead of scattering it across
+                clients.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Local workflows need a stable boundary</h3>
+              <p>
+                Scripts, local web apps, and desktop apps can talk to one narrow
+                localhost API instead of embedding AVFoundation directly.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="section architecture" id="how-it-works">
+          <div class="section-heading">
+            <p class="section-label">How it works</p>
+            <h2>A narrow service between your app and macOS.</h2>
+          </div>
+          <div class="flow" aria-label="CameraBridge architecture">
+            <div class="flow-step">Your app</div>
+            <div class="flow-arrow" aria-hidden="true">→</div>
+            <div class="flow-step">CameraBridge</div>
+            <div class="flow-arrow" aria-hidden="true">→</div>
+            <div class="flow-step">AVFoundation</div>
+            <div class="flow-arrow" aria-hidden="true">→</div>
+            <div class="flow-step">macOS camera</div>
+          </div>
+          <p class="section-copy">
+            Clients talk HTTP. CameraBridge owns native camera interaction. macOS
+            still owns permissions. The result is a predictable local boundary
+            instead of app-specific native camera code.
+          </p>
+        </section>
+
+        <section class="section features" id="v1">
+          <div class="section-heading">
+            <p class="section-label">What is in v1</p>
+            <h2>Small, explicit capabilities.</h2>
+          </div>
+          <div class="grid grid-two">
+            <article class="card feature-list">
+              <h3>Runtime surface</h3>
+              <ul>
+                <li><code>GET /health</code></li>
+                <li><code>GET /v1/permissions</code></li>
+                <li>Device discovery</li>
+                <li>Session claim, start, stop, and device selection</li>
+                <li>Still photo capture</li>
+              </ul>
+            </article>
+            <article class="card feature-list">
+              <h3>Local product shape</h3>
+              <ul>
+                <li><code>camd</code> daemon and CLI entrypoint</li>
+                <li>Menu bar app for onboarding and status</li>
+                <li>Single active camera session model</li>
+                <li>Structured logs and local artifact metadata</li>
+                <li>Versioned localhost API under <code>/v1</code></li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section trust">
+          <div class="section-heading">
+            <p class="section-label">Trust model</p>
+            <h2>Local-first constraints, stated clearly.</h2>
+          </div>
+          <div class="grid grid-two">
+            <article class="card">
+              <h3>What CameraBridge is</h3>
+              <ul>
+                <li>macOS only</li>
+                <li>localhost only</li>
+                <li>Bearer-token protected for mutating endpoints</li>
+                <li>Single-user machine assumption</li>
+              </ul>
+            </article>
+            <article class="card">
+              <h3>What CameraBridge is not</h3>
+              <ul>
+                <li>Not remote access</li>
+                <li>Not cloud sync</li>
+                <li>Not a browser permission bypass</li>
+                <li>Not a general media pipeline</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section example" id="example">
+          <div class="section-heading">
+            <p class="section-label">Quick example</p>
+            <h2>Health and permissions over a local HTTP boundary.</h2>
+          </div>
+          <div class="example-card">
+            <pre><code>curl http://127.0.0.1:PORT/health
+
+{
+  "status": "ok"
+}
+
+curl http://127.0.0.1:PORT/v1/permissions
+
+{
+  "status": "not_determined"
+}</code></pre>
+          </div>
+          <p class="section-copy">
+            The early public surface is intentionally small. Start with health
+            and permission visibility, then grow into device, session, preview,
+            and capture flows as v1 is completed.
+          </p>
+        </section>
+
+        <section class="section cta">
+          <div class="cta-panel">
+            <div>
+              <p class="section-label">Get started</p>
+              <h2>Use the repo as the source of truth.</h2>
+              <p>
+                Read the docs, track the current implementation status, and
+                follow the API contract as CameraBridge v1 comes together.
+              </p>
+            </div>
+            <div class="cta-actions">
+              <a class="button button-primary" href="https://github.com/rschroed/CameraBridge"
+                >Open the GitHub repo</a
+              >
+              <a class="button button-secondary" href="https://github.com/rschroed/CameraBridge/blob/main/docs/api/v1.md"
+                >API contract</a
+              >
+              <a class="button button-secondary" href="https://github.com/rschroed/CameraBridge/blob/main/docs/roadmap/v1.md"
+                >v1 roadmap</a
+              >
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

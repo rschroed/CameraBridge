@@ -21,6 +21,13 @@ The initial scaffold does not include camera, API, or UI implementation yet.
 - [API v1 Contract](docs/api/v1.md)
 - [Engineering Workflow](docs/workflow.md)
 
+## Marketing Site
+
+- Source lives in `site/`
+- GitHub Pages deploys the static files from `site/` via `.github/workflows/github-pages.yml`
+- Update page copy in `site/index.html` and styling in `site/styles.css`
+- Default Pages URL: `https://rschroed.github.io/CameraBridge/`
+
 ## Build
 
 ```bash
