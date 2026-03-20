@@ -1,0 +1,4 @@
+interface:
+  display_name: "CameraBridge PM"
+  short_description: "Scope and package CameraBridge product work."
+  default_prompt: "Use $camerabridge-pm to shape this work so it fits CameraBridge v1 scope, lands as a focused slice, and is packaged honestly for review."
