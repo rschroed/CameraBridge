@@ -46,6 +46,17 @@ public struct HTTPResponse: Sendable, Equatable {
         )
     }
 
+    public static func json<T: Encodable>(statusCode: Int, body: T) -> HTTPResponse {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try! encoder.encode(body)
+        return HTTPResponse(
+            statusCode: statusCode,
+            headers: ["Content-Type": "application/json"],
+            body: data
+        )
+    }
+
     public static func notFound() -> HTTPResponse {
         .json(
             statusCode: 404,
@@ -92,10 +103,14 @@ public struct CameraBridgeRouter: Sendable {
 }
 
 public enum CameraBridgeRoutes {
-    public static func current(permissionStatusProvider: any CameraPermissionStatusProviding) -> [HTTPRoute] {
+    public static func current(
+        permissionStatusProvider: any CameraPermissionStatusProviding,
+        cameraStateProvider: any CameraStateProviding
+    ) -> [HTTPRoute] {
         [
             health(),
             permissionStatus(provider: permissionStatusProvider),
+            sessionState(provider: cameraStateProvider),
         ]
     }
 
@@ -111,6 +126,12 @@ public enum CameraBridgeRoutes {
                 statusCode: 200,
                 body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
             )
+        }
+    }
+
+    public static func sessionState(provider: any CameraStateProviding) -> HTTPRoute {
+        HTTPRoute(method: .get, path: "/v1/session") { _ in
+            .json(statusCode: 200, body: SessionStateResponse(state: provider.currentCameraState()))
         }
     }
 }
@@ -356,6 +377,50 @@ private enum HTTPResponseSerializer {
             return "Not Found"
         default:
             return "Error"
+        }
+    }
+}
+
+private struct SessionStateResponse: Encodable, Equatable {
+    var state: String
+    var activeDeviceID: String?
+    var ownerID: String?
+    var lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case state
+        case activeDeviceID = "active_device_id"
+        case ownerID = "owner_id"
+        case lastError = "last_error"
+    }
+
+    init(state: CameraState) {
+        self.state = state.sessionState.rawValue
+        self.activeDeviceID = state.activeDeviceID
+        self.ownerID = state.currentOwnerID
+        self.lastError = state.lastError?.message
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(state, forKey: .state)
+
+        if let activeDeviceID {
+            try container.encode(activeDeviceID, forKey: .activeDeviceID)
+        } else {
+            try container.encodeNil(forKey: .activeDeviceID)
+        }
+
+        if let ownerID {
+            try container.encode(ownerID, forKey: .ownerID)
+        } else {
+            try container.encodeNil(forKey: .ownerID)
+        }
+
+        if let lastError {
+            try container.encode(lastError, forKey: .lastError)
+        } else {
+            try container.encodeNil(forKey: .lastError)
         }
     }
 }

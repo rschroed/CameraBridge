@@ -11,7 +11,7 @@ public enum PermissionState: String, Sendable, CaseIterable, Equatable {
     case authorized
 }
 
-public enum SessionState: Sendable, Equatable {
+public enum SessionState: String, Sendable, CaseIterable, Equatable {
     case stopped
     case running
 }
@@ -34,6 +34,7 @@ public struct CameraState: Sendable, Equatable {
     public var sessionState: SessionState
     public var previewState: PreviewState
     public var activeDeviceID: String?
+    public var currentOwnerID: String?
     public var lastError: CameraStateError?
 
     public init(
@@ -41,12 +42,14 @@ public struct CameraState: Sendable, Equatable {
         sessionState: SessionState = .stopped,
         previewState: PreviewState = .stopped,
         activeDeviceID: String? = nil,
+        currentOwnerID: String? = nil,
         lastError: CameraStateError? = nil
     ) {
         self.permissionState = permissionState
         self.sessionState = sessionState
         self.previewState = previewState
         self.activeDeviceID = activeDeviceID
+        self.currentOwnerID = currentOwnerID
         self.lastError = lastError
     }
 }
@@ -55,11 +58,27 @@ public protocol CameraPermissionStatusProviding: Sendable {
     func currentPermissionState() -> PermissionState
 }
 
+public protocol CameraStateProviding: Sendable {
+    func currentCameraState() -> CameraState
+}
+
 public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
     public init() {}
 
     public func currentPermissionState() -> PermissionState {
         PermissionState(authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+}
+
+public struct DefaultCameraStateProvider: CameraStateProviding {
+    public var state: CameraState
+
+    public init(state: CameraState = CameraState()) {
+        self.state = state
+    }
+
+    public func currentCameraState() -> CameraState {
+        state
     }
 }
 

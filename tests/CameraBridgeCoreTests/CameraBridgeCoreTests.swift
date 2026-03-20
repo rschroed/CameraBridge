@@ -15,6 +15,7 @@ func cameraStateDefaultsMatchEarlySlice() {
     #expect(state.sessionState == .stopped)
     #expect(state.previewState == .stopped)
     #expect(state.activeDeviceID == nil)
+    #expect(state.currentOwnerID == nil)
     #expect(state.lastError == nil)
 }
 
@@ -27,6 +28,12 @@ func permissionStateRawValuesMatchAPIVocabulary() {
 }
 
 @Test
+func sessionStateRawValuesMatchAPIVocabulary() {
+    #expect(SessionState.stopped.rawValue == "stopped")
+    #expect(SessionState.running.rawValue == "running")
+}
+
+@Test
 func cameraStateRetainsExplicitValues() {
     let error = CameraStateError(message: "permission unavailable")
     let state = CameraState(
@@ -34,6 +41,7 @@ func cameraStateRetainsExplicitValues() {
         sessionState: .running,
         previewState: .running,
         activeDeviceID: "camera-1",
+        currentOwnerID: "client-1",
         lastError: error
     )
 
@@ -41,6 +49,7 @@ func cameraStateRetainsExplicitValues() {
     #expect(state.sessionState == .running)
     #expect(state.previewState == .running)
     #expect(state.activeDeviceID == "camera-1")
+    #expect(state.currentOwnerID == "client-1")
     #expect(state.lastError == error)
 }
 
@@ -50,4 +59,19 @@ func permissionStateMapsAVFoundationStatusValues() {
     #expect(PermissionState(authorizationStatus: .restricted) == .restricted)
     #expect(PermissionState(authorizationStatus: .denied) == .denied)
     #expect(PermissionState(authorizationStatus: .authorized) == .authorized)
+}
+
+@Test
+func defaultCameraStateProviderReturnsConfiguredState() {
+    let state = CameraState(
+        permissionState: .authorized,
+        sessionState: .running,
+        previewState: .stopped,
+        activeDeviceID: "camera-1",
+        currentOwnerID: "client-1",
+        lastError: CameraStateError(message: "session failed")
+    )
+    let provider = DefaultCameraStateProvider(state: state)
+
+    #expect(provider.currentCameraState() == state)
 }

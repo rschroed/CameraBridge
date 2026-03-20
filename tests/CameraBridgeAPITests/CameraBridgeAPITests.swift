@@ -20,7 +20,10 @@ func routerReturnsNotFoundForUnknownRoute() {
 @Test
 func routerReturnsHealthResponseForHealthRoute() {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+            cameraStateProvider: FixedCameraStateProvider(state: CameraState())
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/health"))
 
@@ -34,7 +37,10 @@ func localHTTPServerReturnsHealthResponse() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
+            )
         )
     )
 
@@ -55,7 +61,10 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
+            )
         )
     )
 
@@ -74,7 +83,10 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
 @Test(arguments: PermissionState.allCases)
 func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
     let router = CameraBridgeRouter(
-        routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: state))
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: state),
+            cameraStateProvider: FixedCameraStateProvider(state: CameraState())
+        )
     )
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
 
@@ -88,7 +100,10 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
         router: CameraBridgeRouter(
-            routes: CameraBridgeRoutes.current(permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted))
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
+                cameraStateProvider: FixedCameraStateProvider(state: CameraState())
+            )
         )
     )
 
@@ -103,10 +118,78 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "restricted" }"#)
 }
 
+@Test
+func routerReturnsSessionStateForSessionRoute() {
+    let state = CameraState(
+        permissionState: .authorized,
+        sessionState: .running,
+        previewState: .stopped,
+        activeDeviceID: "camera-1",
+        currentOwnerID: "client-1",
+        lastError: CameraStateError(message: "session failed")
+    )
+    let router = CameraBridgeRouter(
+        routes: CameraBridgeRoutes.current(
+            permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized),
+            cameraStateProvider: FixedCameraStateProvider(state: state)
+        )
+    )
+    let response = router.response(for: HTTPRequest(method: .get, path: "/v1/session"))
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"active_device_id":"camera-1","last_error":"session failed","owner_id":"client-1","state":"running"}"#
+    )
+}
+
+@Test
+func localHTTPServerReturnsSessionStateWithoutAuth() async throws {
+    let port = try reserveEphemeralPort()
+    let state = CameraState(
+        permissionState: .restricted,
+        sessionState: .stopped,
+        previewState: .stopped,
+        activeDeviceID: nil,
+        currentOwnerID: nil,
+        lastError: nil
+    )
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: CameraBridgeRouter(
+            routes: CameraBridgeRoutes.current(
+                permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
+                cameraStateProvider: FixedCameraStateProvider(state: state)
+            )
+        )
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/session"))
+    let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"active_device_id":null,"last_error":null,"owner_id":null,"state":"stopped"}"#
+    )
+}
+
 private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
     let state: PermissionState
 
     func currentPermissionState() -> PermissionState {
+        state
+    }
+}
+
+private struct FixedCameraStateProvider: CameraStateProviding {
+    let state: CameraState
+
+    func currentCameraState() -> CameraState {
         state
     }
 }

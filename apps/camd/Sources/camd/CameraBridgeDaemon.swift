@@ -32,7 +32,8 @@ struct CameraBridgeDaemon {
     func makeServer(
         router: CameraBridgeRouter = CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: AVFoundationCameraPermissionStatusProvider()
+                permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
+                cameraStateProvider: DefaultCameraStateProvider()
             )
         )
     ) -> LocalHTTPServer {
@@ -47,7 +48,8 @@ struct CameraBridgeDaemon {
     func start(
         router: CameraBridgeRouter = CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: AVFoundationCameraPermissionStatusProvider()
+                permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
+                cameraStateProvider: DefaultCameraStateProvider()
             )
         )
     ) throws -> LocalHTTPServer {
