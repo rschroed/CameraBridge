@@ -14,6 +14,11 @@ This repository is intentionally scaffolded with strict package boundaries:
 
 The initial scaffold does not include camera, API, or UI implementation yet.
 
+## Docs
+
+- [Architecture Overview](docs/architecture-overview.md)
+- [v1 Roadmap](docs/roadmap/v1.md)
+
 ## Build
 
 ```bash
