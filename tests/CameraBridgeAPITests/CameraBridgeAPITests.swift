@@ -159,6 +159,219 @@ func localHTTPServerReturnsSessionStateWithoutAuth() async throws {
 }
 
 @Test
+func routerRejectsSessionStartWithoutBearerToken() {
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1")
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 401)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#
+    )
+}
+
+@Test
+func routerRejectsSessionStartWithoutOwnerID() {
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1")
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":" "}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 400)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_request","message":"owner_id is required"}}"#
+    )
+}
+
+@Test
+func routerRejectsSessionStartWithoutSelectedDevice() {
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Cannot start session without an active device"}}"#
+    )
+}
+
+@Test
+func routerRejectsSessionStartWithoutAuthorizedPermission() {
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1")
+    )
+    let router = makeRouter(sessionController: sessionController, permissionState: .denied)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Camera permission is denied"}}"#
+    )
+}
+
+@Test
+func routerReturnsRunningSessionForAuthorizedSessionStart() {
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1")
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"active_device_id":"camera-1","last_error":null,"owner_id":"client-1","state":"running"}"#
+    )
+    #expect(sessionController.currentCameraState().sessionState == .running)
+    #expect(sessionController.currentCameraState().currentOwnerID == "client-1")
+}
+
+@Test
+func routerRejectsSessionStopWithoutBearerToken() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/stop",
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 401)
+}
+
+@Test
+func routerRejectsSessionStopWhenAlreadyStopped() {
+    let sessionController = makeSessionController()
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/stop",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Session is already stopped"}}"#
+    )
+}
+
+@Test
+func routerRejectsSessionStopForOwnerMismatch() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/stop",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-2"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"ownership_conflict","message":"Session is owned by client-1"}}"#
+    )
+}
+
+@Test
+func routerReturnsStoppedSessionForAuthorizedSessionStop() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .running,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/stop",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"active_device_id":"camera-1","last_error":null,"owner_id":null,"state":"stopped"}"#
+    )
+    #expect(sessionController.currentCameraState().sessionState == .stopped)
+    #expect(sessionController.currentCameraState().currentOwnerID == nil)
+}
+
+@Test
 func routerRejectsDeviceSelectionWithoutBearerToken() {
     let sessionController = makeSessionController()
     let router = makeRouter(sessionController: sessionController)
@@ -317,6 +530,54 @@ func localHTTPServerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() asy
     #expect(sessionController.currentCameraState().activeDeviceID == "camera-2")
 }
 
+@Test
+func localHTTPServerSupportsSessionStartThenStop() async throws {
+    let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController(
+        state: CameraState(activeDeviceID: "camera-1")
+    )
+    let server = LocalHTTPServer(
+        configuration: .init(host: "127.0.0.1", port: port),
+        router: makeRouter(sessionController: sessionController)
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+
+    var startRequest = URLRequest(
+        url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/session/start"))
+    )
+    startRequest.httpMethod = "POST"
+    startRequest.httpBody = Data(#"{"owner_id":"client-1"}"#.utf8)
+    startRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    startRequest.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    let (startData, startResponse) = try await URLSession.shared.data(for: startRequest)
+    let startHTTPResponse = try #require(startResponse as? HTTPURLResponse)
+
+    #expect(startHTTPResponse.statusCode == 200)
+    #expect(
+        String(decoding: startData, as: UTF8.self) ==
+        #"{"active_device_id":"camera-1","last_error":null,"owner_id":"client-1","state":"running"}"#
+    )
+
+    var stopRequest = URLRequest(
+        url: try #require(URL(string: "http://127.0.0.1:\(boundPort)/v1/session/stop"))
+    )
+    stopRequest.httpMethod = "POST"
+    stopRequest.httpBody = Data(#"{"owner_id":"client-1"}"#.utf8)
+    stopRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    stopRequest.setValue("Bearer test-token", forHTTPHeaderField: "Authorization")
+    let (stopData, stopResponse) = try await URLSession.shared.data(for: stopRequest)
+    let stopHTTPResponse = try #require(stopResponse as? HTTPURLResponse)
+
+    #expect(stopHTTPResponse.statusCode == 200)
+    #expect(
+        String(decoding: stopData, as: UTF8.self) ==
+        #"{"active_device_id":"camera-1","last_error":null,"owner_id":null,"state":"stopped"}"#
+    )
+}
+
 private func makeRouter(
     sessionController: DefaultCameraSessionController,
     permissionState: PermissionState = .authorized,
@@ -327,6 +588,8 @@ private func makeRouter(
             permissionStatusProvider: FixedPermissionStatusProvider(state: permissionState),
             cameraStateProvider: sessionController,
             deviceSelector: sessionController,
+            sessionStarter: sessionController,
+            sessionStopper: sessionController,
             authorizer: StaticBearerTokenAuthorizer(bearerToken: bearerToken)
         )
     )

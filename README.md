@@ -12,8 +12,9 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The repository currently includes the earliest daemon and API slices, with the
-remaining v1 surface defined in the docs.
+The repository currently includes early daemon and API slices for health,
+permission status, session state, device selection, and basic session
+lifecycle control, with the remaining v1 surface defined in the docs.
 
 ## v1 Auth And Ownership
 

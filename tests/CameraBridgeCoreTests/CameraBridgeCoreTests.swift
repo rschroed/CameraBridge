@@ -176,6 +176,185 @@ func defaultCameraSessionControllerRejectsMismatchedOwner() {
     #expect(state.lastError == CameraStateError(message: "Session is owned by client-1"))
 }
 
+@Test
+func defaultCameraSessionControllerStartsSessionWithSelectedDeviceAndOwner() throws {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(
+            permissionState: .notDetermined,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: nil,
+            lastError: nil
+        )
+    )
+
+    let state = try controller.startSession(ownerID: "client-1", permissionState: .authorized)
+
+    #expect(state.permissionState == .authorized)
+    #expect(state.sessionState == .running)
+    #expect(state.activeDeviceID == "camera-1")
+    #expect(state.currentOwnerID == "client-1")
+    #expect(state.lastError == nil)
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStartWithoutActiveDevice() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        )
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-1", permissionState: .authorized)
+        Issue.record("Expected session start without device to fail")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .missingActiveDevice)
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.sessionState == .stopped)
+    #expect(state.currentOwnerID == nil)
+    #expect(state.lastError == CameraStateError(message: "Cannot start session without an active device"))
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStartWithoutAuthorizedPermission() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(activeDeviceID: "camera-1")
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-1", permissionState: .denied)
+        Issue.record("Expected session start without permission to fail")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .permissionRequired(status: .denied))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.permissionState == .denied)
+    #expect(state.sessionState == .stopped)
+    #expect(state.lastError == CameraStateError(message: "Camera permission is denied"))
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStartForOwnerConflict() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-2", permissionState: .authorized)
+        Issue.record("Expected owner conflict on start")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .ownershipConflict(currentOwnerID: "client-1"))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is owned by client-1"))
+}
+
+@Test
+func defaultCameraSessionControllerStopsRunningSessionAndReleasesOwner() throws {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .running,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    let state = try controller.stopSession(ownerID: "client-1")
+
+    #expect(state.sessionState == .stopped)
+    #expect(state.previewState == .stopped)
+    #expect(state.activeDeviceID == "camera-1")
+    #expect(state.currentOwnerID == nil)
+    #expect(state.lastError == nil)
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStopWhenAlreadyStopped() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(devices: [])
+    )
+
+    do {
+        _ = try controller.stopSession(ownerID: "client-1")
+        Issue.record("Expected stop on stopped session to fail")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .alreadyStopped)
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is already stopped"))
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStopForOwnerMismatch() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(devices: []),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.stopSession(ownerID: "client-2")
+        Issue.record("Expected owner conflict on stop")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .ownershipConflict(currentOwnerID: "client-1"))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    #expect(controller.currentCameraState().lastError == CameraStateError(message: "Session is owned by client-1"))
+}
+
 private struct FixedDeviceListing: CameraDeviceListing {
     let devices: [CameraDevice]
 

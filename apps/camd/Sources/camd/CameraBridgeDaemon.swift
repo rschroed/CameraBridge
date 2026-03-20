@@ -44,6 +44,8 @@ struct CameraBridgeDaemon {
                 permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
                 cameraStateProvider: sessionController,
                 deviceSelector: sessionController,
+                sessionStarter: sessionController,
+                sessionStopper: sessionController,
                 authorizer: StaticBearerTokenAuthorizer(bearerToken: configuration.authToken)
             )
         )

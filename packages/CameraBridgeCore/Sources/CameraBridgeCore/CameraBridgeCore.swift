@@ -88,9 +88,26 @@ public protocol CameraDeviceSelecting: Sendable {
     func selectDevice(id: String, ownerID: String?) throws -> CameraState
 }
 
+public protocol CameraSessionStarting: Sendable {
+    func startSession(ownerID: String, permissionState: PermissionState) throws -> CameraState
+}
+
+public protocol CameraSessionStopping: Sendable {
+    func stopSession(ownerID: String) throws -> CameraState
+}
+
 public enum CameraDeviceSelectionError: Error, Sendable, Equatable {
     case ownershipConflict(currentOwnerID: String)
     case unavailableDevice(id: String)
+}
+
+public enum CameraSessionLifecycleError: Error, Sendable, Equatable {
+    case ownershipConflict(currentOwnerID: String)
+    case permissionRequired(status: PermissionState)
+    case missingActiveDevice
+    case alreadyRunning
+    case alreadyStopped
+    case missingOwner
 }
 
 public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
@@ -139,7 +156,7 @@ public struct DefaultCameraStateProvider: CameraStateProviding {
     }
 }
 
-public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceSelecting, @unchecked Sendable {
+public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, @unchecked Sendable {
     private let deviceListing: any CameraDeviceListing
     private let stateLock = NSLock()
     private var state: CameraState
@@ -175,6 +192,71 @@ public final class DefaultCameraSessionController: CameraStateProviding, CameraD
         }
 
         state.activeDeviceID = id
+        state.lastError = nil
+        return state
+    }
+
+    public func startSession(ownerID: String, permissionState: PermissionState) throws -> CameraState {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        state.permissionState = permissionState
+
+        if let currentOwnerID = state.currentOwnerID, currentOwnerID != ownerID {
+            let message = "Session is owned by \(currentOwnerID)"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.ownershipConflict(currentOwnerID: currentOwnerID)
+        }
+
+        guard permissionState == .authorized else {
+            let message = "Camera permission is \(permissionState.rawValue)"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.permissionRequired(status: permissionState)
+        }
+
+        guard state.activeDeviceID != nil else {
+            let message = "Cannot start session without an active device"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.missingActiveDevice
+        }
+
+        guard state.sessionState != .running else {
+            let message = "Session is already running"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.alreadyRunning
+        }
+
+        state.sessionState = .running
+        state.currentOwnerID = ownerID
+        state.lastError = nil
+        return state
+    }
+
+    public func stopSession(ownerID: String) throws -> CameraState {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+
+        guard state.sessionState == .running else {
+            let message = "Session is already stopped"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.alreadyStopped
+        }
+
+        guard let currentOwnerID = state.currentOwnerID else {
+            let message = "Running session has no owner"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.missingOwner
+        }
+
+        guard currentOwnerID == ownerID else {
+            let message = "Session is owned by \(currentOwnerID)"
+            state.lastError = CameraStateError(message: message)
+            throw CameraSessionLifecycleError.ownershipConflict(currentOwnerID: currentOwnerID)
+        }
+
+        state.sessionState = .stopped
+        state.previewState = .stopped
+        state.currentOwnerID = nil
         state.lastError = nil
         return state
     }
