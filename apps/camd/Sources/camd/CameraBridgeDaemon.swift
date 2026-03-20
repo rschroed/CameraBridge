@@ -1,0 +1,47 @@
+import CameraBridgeAPI
+import Foundation
+
+struct ServerConfiguration: Sendable, Equatable {
+    static let defaultHost = "127.0.0.1"
+    static let defaultPort: UInt16 = 8731
+
+    var host: String
+    var port: UInt16
+
+    init(host: String = ServerConfiguration.defaultHost, port: UInt16 = ServerConfiguration.defaultPort) {
+        self.host = host
+        self.port = port
+    }
+}
+
+struct CameraBridgeDaemon {
+    typealias Logger = @Sendable (String) -> Void
+
+    var configuration: ServerConfiguration
+    var logger: Logger
+
+    init(
+        configuration: ServerConfiguration = ServerConfiguration(),
+        logger: @escaping Logger = { print($0) }
+    ) {
+        self.configuration = configuration
+        self.logger = logger
+    }
+
+    func makeServer(router: CameraBridgeRouter = CameraBridgeRouter()) -> LocalHTTPServer {
+        LocalHTTPServer(
+            configuration: .init(host: configuration.host, port: configuration.port),
+            router: router,
+            logger: logger
+        )
+    }
+
+    @discardableResult
+    func start(router: CameraBridgeRouter = CameraBridgeRouter()) throws -> LocalHTTPServer {
+        logger("starting camd on \(configuration.host):\(configuration.port)")
+        let server = makeServer(router: router)
+        let port = try server.start()
+        logger("camd ready on \(configuration.host):\(port)")
+        return server
+    }
+}
