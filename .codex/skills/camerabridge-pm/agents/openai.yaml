@@ -1,0 +1,7 @@
+interface:
+  display_name: "CameraBridge PM"
+  short_description: "Product planning for CameraBridge v1"
+  default_prompt: "Use $camerabridge-pm to draft a PRD, break down an issue, review scope, or assess release readiness for CameraBridge."
+
+policy:
+  allow_implicit_invocation: true
