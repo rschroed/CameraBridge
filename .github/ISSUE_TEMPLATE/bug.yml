@@ -1,0 +1,54 @@
+name: Bug Report
+description: Track a focused bug fix slice.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the observed behavior and why it is a bug.
+      placeholder: The daemon reports healthy even when...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: Describe the correct behavior.
+      placeholder: Health should return an error state when...
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Define the narrow slice to fix now.
+      placeholder: Fix the status mapping in CameraBridgeAPI only. Do not change capture behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance Criteria
+      description: List concrete conditions that must be true when this issue is done.
+      placeholder: |
+        - Returns the correct HTTP status code
+        - Includes a handler test covering the failure case
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification
+      description: Explain how the change should be tested.
+      placeholder: Add/update handler tests and include any manual verification notes.
+    validations:
+      required: true
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out Of Scope
+      description: Record adjacent work that should not be included in this issue.
+      placeholder: Do not refactor session ownership or change unrelated endpoints.
