@@ -163,16 +163,37 @@ public struct CameraBridgeClient {
             path: "/v1/session",
             requiresAuthorization: false
         )
-        guard let state = CameraBridgeSessionState(rawValue: response.state) else {
-            throw CameraBridgeClientError.invalidStatus(response.state)
-        }
+        return try makeSessionSnapshot(from: response)
+    }
 
-        return CameraBridgeSessionSnapshot(
-            state: state,
-            activeDeviceID: response.activeDeviceID,
-            ownerID: response.ownerID,
-            lastError: response.lastError
+    public func selectDevice(deviceID: String, ownerID: String?) async throws -> CameraBridgeSessionSnapshot {
+        let response: SessionStateResponse = try await send(
+            method: "POST",
+            path: "/v1/session/select-device",
+            requiresAuthorization: true,
+            requestBody: DeviceSelectionRequest(deviceID: deviceID, ownerID: ownerID)
         )
+        return try makeSessionSnapshot(from: response)
+    }
+
+    public func startSession(ownerID: String) async throws -> CameraBridgeSessionSnapshot {
+        let response: SessionStateResponse = try await send(
+            method: "POST",
+            path: "/v1/session/start",
+            requiresAuthorization: true,
+            requestBody: SessionOwnerRequest(ownerID: ownerID)
+        )
+        return try makeSessionSnapshot(from: response)
+    }
+
+    public func stopSession(ownerID: String) async throws -> CameraBridgeSessionSnapshot {
+        let response: SessionStateResponse = try await send(
+            method: "POST",
+            path: "/v1/session/stop",
+            requiresAuthorization: true,
+            requestBody: SessionOwnerRequest(ownerID: ownerID)
+        )
+        return try makeSessionSnapshot(from: response)
     }
 
     private func send<Response: Decodable>(
@@ -219,9 +240,40 @@ public struct CameraBridgeClient {
 
         return try JSONDecoder().decode(Response.self, from: data)
     }
+
+    private func makeSessionSnapshot(from response: SessionStateResponse) throws -> CameraBridgeSessionSnapshot {
+        guard let state = CameraBridgeSessionState(rawValue: response.state) else {
+            throw CameraBridgeClientError.invalidStatus(response.state)
+        }
+
+        return CameraBridgeSessionSnapshot(
+            state: state,
+            activeDeviceID: response.activeDeviceID,
+            ownerID: response.ownerID,
+            lastError: response.lastError
+        )
+    }
 }
 
 private struct EmptyRequest: Encodable {}
+
+private struct SessionOwnerRequest: Encodable {
+    var ownerID: String
+
+    enum CodingKeys: String, CodingKey {
+        case ownerID = "owner_id"
+    }
+}
+
+private struct DeviceSelectionRequest: Encodable {
+    var deviceID: String
+    var ownerID: String?
+
+    enum CodingKeys: String, CodingKey {
+        case deviceID = "device_id"
+        case ownerID = "owner_id"
+    }
+}
 
 private struct PermissionStatusResponse: Decodable {
     var status: String
