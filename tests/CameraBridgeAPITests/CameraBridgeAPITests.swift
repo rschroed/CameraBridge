@@ -51,6 +51,40 @@ func localHTTPServerReturnsHealthResponse() async throws {
 }
 
 @Test
+func localHTTPServerReturnsHealthResponseForLocalhostAlias() async throws {
+    let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "localhost", port: port),
+        router: makeRouter(sessionController: sessionController)
+    )
+
+    defer { server.stop() }
+
+    let boundPort = try server.start()
+    let url = try #require(URL(string: "http://127.0.0.1:\(boundPort)/health"))
+    let (data, response) = try await URLSession.shared.data(from: url)
+    let httpResponse = try #require(response as? HTTPURLResponse)
+
+    #expect(httpResponse.statusCode == 200)
+    #expect(String(decoding: data, as: UTF8.self) == #"{ "status": "ok" }"#)
+}
+
+@Test
+func localHTTPServerRejectsInvalidHostConfiguration() throws {
+    let port = try reserveEphemeralPort()
+    let sessionController = makeSessionController()
+    let server = LocalHTTPServer(
+        configuration: .init(host: "camera-bridge.local", port: port),
+        router: makeRouter(sessionController: sessionController)
+    )
+
+    #expect(throws: HTTPServerError.invalidHost("camera-bridge.local")) {
+        _ = try server.start()
+    }
+}
+
+@Test
 func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
     let port = try reserveEphemeralPort()
     let sessionController = makeSessionController()

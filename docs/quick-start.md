@@ -57,6 +57,8 @@ When the app starts the service, it stores the local bearer token at:
 ~/Library/Application Support/CameraBridge/auth-token
 ```
 
+The packaged app starts `camd` as a localhost-only service intended to be reachable from other local clients at `127.0.0.1:8731`.
+
 Camera captures are stored under:
 
 ```text
