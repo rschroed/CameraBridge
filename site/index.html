@@ -130,7 +130,7 @@
                 <li><code>GET /health</code></li>
                 <li><code>GET /v1/permissions</code></li>
                 <li>Device discovery</li>
-                <li>Session claim, start, stop, and device selection</li>
+                <li>Session start, stop, and device selection</li>
                 <li>Still photo capture</li>
               </ul>
             </article>
@@ -140,6 +140,7 @@
                 <li><code>camd</code> daemon and CLI entrypoint</li>
                 <li>Menu bar app for onboarding and status</li>
                 <li>Single active camera session model</li>
+                <li>Implicit ownership via session start in v1</li>
                 <li>Structured logs and local artifact metadata</li>
                 <li>Versioned localhost API under <code>/v1</code></li>
               </ul>
@@ -158,7 +159,9 @@
               <ul>
                 <li>macOS only</li>
                 <li>localhost only</li>
+                <li>Read-only endpoints may stay open in early v1</li>
                 <li>Bearer-token protected for mutating endpoints</li>
+                <li>No separate claim or release endpoints in v1</li>
                 <li>Single-user machine assumption</li>
               </ul>
             </article>
@@ -194,8 +197,10 @@ curl http://127.0.0.1:PORT/v1/permissions
           </div>
           <p class="section-copy">
             The early public surface is intentionally small. Start with health
-            and permission visibility, then grow into device, session, preview,
-            and capture flows as v1 is completed.
+            and permission visibility, then grow into device, session, and
+            capture flows as v1 is completed. Mutating routes are planned to use
+            bearer-token protection, with ownership established implicitly when a
+            client starts the session.
           </p>
         </section>
 
