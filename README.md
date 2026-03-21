@@ -12,12 +12,12 @@ This repository is organized with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The repository currently ships the v1 localhost service for health, permission
+The repository currently ships the v1 first-capture loop: health, permission
 status and request, device listing and selection, session state, session
 lifecycle control, and still photo capture with local artifact metadata. It
 also includes the minimal menu bar app shell, the Python first-capture example,
-and the core v1 docs. Preview transport and broader client surfaces remain
-deferred work.
+and the core v1 docs needed to run that flow end to end. Preview transport and
+broader client surfaces remain deferred until after v1.
 
 ## v1 Auth And Ownership
 
@@ -33,6 +33,8 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 
 ## Docs
 
+- The documents below describe the shipped first-capture v1 slice and the
+  deferred work that remains outside that slice.
 - [Quick Start](docs/quick-start.md)
 - [Release Readiness](docs/release-readiness.md)
 - [Architecture Overview](docs/architecture-overview.md)

@@ -37,7 +37,6 @@ CameraBridge owns:
 - camera permission state and requests
 - device discovery
 - capture session lifecycle
-- preview streaming
 - still image capture
 - minimal runtime state
 
@@ -59,13 +58,14 @@ A single, centralized representation of:
 
 - permission state
 - session state
-- preview state
+- preview state reserved for future preview work
 - active device
 - last error
 
 This state lives in `CameraBridgeCore` and is the source of truth.
 Permission reads, permission requests, and permission-dependent session
 preconditions must all flow through this Core-owned state path.
+The shipped v1 surface does not expose preview transport or preview endpoints.
 
 ---
 
@@ -172,6 +172,7 @@ CameraBridge will not:
 - act as a virtual camera
 - bypass browser permissions
 - stream video remotely
+- expose preview transport in the shipped v1 surface
 - manage application workflows
 - support multiple concurrent sessions (v1)
 
