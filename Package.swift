@@ -19,6 +19,10 @@ let package = Package(
             name: "CameraBridgeClientSwift",
             targets: ["CameraBridgeClientSwift"]
         ),
+        .library(
+            name: "CameraBridgeSupport",
+            targets: ["CameraBridgeSupport"]
+        ),
         .executable(
             name: "camd",
             targets: ["camd"]
@@ -43,14 +47,18 @@ let package = Package(
             dependencies: ["CameraBridgeAPI"],
             path: "packages/CameraBridgeClientSwift/Sources/CameraBridgeClientSwift"
         ),
+        .target(
+            name: "CameraBridgeSupport",
+            path: "packages/CameraBridgeSupport/Sources/CameraBridgeSupport"
+        ),
         .executableTarget(
             name: "camd",
-            dependencies: ["CameraBridgeAPI", "CameraBridgeCore"],
+            dependencies: ["CameraBridgeAPI", "CameraBridgeCore", "CameraBridgeSupport"],
             path: "apps/camd/Sources/camd"
         ),
         .executableTarget(
             name: "CameraBridgeApp",
-            dependencies: ["CameraBridgeClientSwift"],
+            dependencies: ["CameraBridgeClientSwift", "CameraBridgeSupport"],
             path: "apps/CameraBridgeApp/Sources/CameraBridgeApp"
         ),
         .testTarget(
@@ -69,9 +77,19 @@ let package = Package(
             path: "tests/CameraBridgeClientSwiftTests"
         ),
         .testTarget(
+            name: "CameraBridgeSupportTests",
+            dependencies: ["CameraBridgeSupport"],
+            path: "tests/CameraBridgeSupportTests"
+        ),
+        .testTarget(
             name: "CameraBridgeAppTests",
             dependencies: ["CameraBridgeApp"],
             path: "tests/CameraBridgeAppTests"
+        ),
+        .testTarget(
+            name: "CameraBridgeDaemonTests",
+            dependencies: ["camd"],
+            path: "tests/CameraBridgeDaemonTests"
         ),
     ]
 )

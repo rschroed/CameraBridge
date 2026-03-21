@@ -31,11 +31,13 @@ Launch the packaged app from Finder or with:
 open "$(swift build --show-bin-path)/CameraBridgeApp.app"
 ```
 
-When the app starts the service itself, it persists the local bearer token at:
+When the app starts the bundled service, `camd` loads or creates the local bearer token at:
 
 ```text
 ~/Library/Application Support/CameraBridge/auth-token
 ```
+
+The app then reads that same token file for its protected localhost API requests.
 
 ## Manual Verification
 

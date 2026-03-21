@@ -51,11 +51,13 @@ From the menu bar app:
 3. click `Request Camera Access` if permission is still undecided
 4. confirm the app shows `Permission: authorized`
 
-When the app starts the service, it stores the local bearer token at:
+When `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at:
 
 ```text
 ~/Library/Application Support/CameraBridge/auth-token
 ```
+
+The packaged app uses that same daemon-owned token contract when it launches the bundled service.
 
 The packaged app starts `camd` as a localhost-only service intended to be reachable from other local clients at `127.0.0.1:8731`.
 
