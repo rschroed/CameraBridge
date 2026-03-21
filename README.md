@@ -31,6 +31,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 
 ## Docs
 
+- [Quick Start](docs/quick-start.md)
 - [Architecture Overview](docs/architecture-overview.md)
 - [v1 Roadmap](docs/roadmap/v1.md)
 - [API v1 Contract](docs/api/v1.md)
@@ -60,4 +61,31 @@ The packaged app bundle, including the bundled `camd` executable, is written to:
 
 ```text
 $(swift build --show-bin-path)/CameraBridgeApp.app
+```
+
+## First Capture
+
+Follow the full setup and first-capture path in [docs/quick-start.md](docs/quick-start.md).
+
+The shortest successful path is:
+
+1. package and launch `CameraBridgeApp.app`
+2. click `Start Service`
+3. confirm `Permission: authorized`
+4. run the minimal Python example with a real device id from `GET /v1/devices`
+
+```bash
+python3 examples/python/capture_photo.py --device-id "YOUR_DEVICE_ID"
+```
+
+The example reads the bearer token from:
+
+```text
+~/Library/Application Support/CameraBridge/auth-token
+```
+
+and writes captures under:
+
+```text
+~/Library/Application Support/CameraBridge/Captures/
 ```
