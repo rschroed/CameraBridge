@@ -469,7 +469,10 @@ public final class LocalHTTPServer: @unchecked Sendable {
             throw HTTPServerError.invalidPort(configuration.port)
         }
 
-        let listener = try NWListener(using: .tcp, on: port)
+        let localEndpoint = try resolvedLocalEndpoint(port: port)
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = localEndpoint
+        let listener = try NWListener(using: parameters)
         let readySemaphore = DispatchSemaphore(value: 0)
         var startError: Error?
 
@@ -563,10 +566,35 @@ public final class LocalHTTPServer: @unchecked Sendable {
             connection.cancel()
         })
     }
+
+    private func resolvedLocalEndpoint(port: NWEndpoint.Port) throws -> NWEndpoint {
+        guard let host = resolvedLoopbackHost() else {
+            throw HTTPServerError.invalidHost(configuration.host)
+        }
+
+        return .hostPort(host: host, port: port)
+    }
+
+    private func resolvedLoopbackHost() -> NWEndpoint.Host? {
+        let normalizedHost = configuration.host.trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+
+        switch normalizedHost {
+        case "127.0.0.1":
+            return .ipv4(.loopback)
+        case "::1":
+            return .ipv6(.loopback)
+        case "localhost":
+            return .ipv4(.loopback)
+        default:
+            return nil
+        }
+    }
 }
 
 public enum HTTPServerError: Error, Sendable, Equatable {
     case invalidPort(UInt16)
+    case invalidHost(String)
 }
 
 private struct RouteKey: Hashable, Sendable {
