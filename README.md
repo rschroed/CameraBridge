@@ -56,7 +56,7 @@ Package the local menu bar app bundle with:
 apps/CameraBridgeApp/scripts/package-app.sh
 ```
 
-The packaged app bundle is written to:
+The packaged app bundle, including the bundled `camd` executable, is written to:
 
 ```text
 $(swift build --show-bin-path)/CameraBridgeApp.app
