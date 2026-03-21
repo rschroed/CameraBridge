@@ -140,5 +140,6 @@ curl -s -X POST http://127.0.0.1:8731/v1/session/stop \
 ## Next References
 
 - [API v1 Contract](./api/v1.md)
+- [Release Readiness](./release-readiness.md)
 - [CameraBridgeApp README](../apps/CameraBridgeApp/README.md)
 - [Python Example](../examples/python/capture_photo.py)
