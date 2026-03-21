@@ -2,7 +2,7 @@
 
 CameraBridge is a local macOS camera service that exposes AVFoundation over a localhost API.
 
-This repository is intentionally scaffolded with strict package boundaries:
+This repository is organized with strict package boundaries:
 
 - `apps/camd` for the daemon and CLI entrypoint
 - `apps/CameraBridgeApp` for the macOS menu bar app
@@ -12,24 +12,24 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The repository currently includes early daemon and API slices for health,
-permission status and request, device listing and selection, session state,
-basic session lifecycle control, and still photo capture with local artifact
-metadata, plus a minimal menu bar app shell, with the remaining v1 surface
-defined in the docs. Preview transport, example clients, and fuller onboarding
-UI are still in progress.
+The repository currently ships the v1 localhost service for health, permission
+status and request, device listing and selection, session state, session
+lifecycle control, and still photo capture with local artifact metadata. It
+also includes the minimal menu bar app shell, the Python first-capture example,
+and the core v1 docs. Preview transport and broader client surfaces remain
+deferred work.
 
 ## v1 Auth And Ownership
 
 CameraBridge v1 keeps the trust model intentionally narrow:
 
 - read-only localhost endpoints may remain unauthenticated in the early v1 slices
-- planned mutating endpoints use a bearer token or equivalent local secret
+- mutating endpoints use a bearer token or equivalent local secret
 - when `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at `~/Library/Application Support/CameraBridge/auth-token`
 - v1 does not add separate session `claim` or `release` endpoints
 - successful `POST /v1/session/start` establishes implicit session ownership
 - session ownership is released by `POST /v1/session/stop` or when the session ends
-- ownership-conflict and invalid-state failures are explicit parts of the planned contract
+- ownership-conflict and invalid-state failures are explicit parts of the current contract
 
 ## Docs
 
