@@ -64,6 +64,8 @@ A single, centralized representation of:
 - last error
 
 This state lives in `CameraBridgeCore` and is the source of truth.
+Permission reads, permission requests, and permission-dependent session
+preconditions must all flow through this Core-owned state path.
 
 ---
 
@@ -103,6 +105,7 @@ Must never be inferred implicitly.
 - AVFoundation integration
 - domain models
 - state management
+- permission status and request coordination
 
 No HTTP, no UI.
 
@@ -113,8 +116,9 @@ No HTTP, no UI.
 - HTTP interface
 - request/response models
 - auth validation
+- translation of HTTP permission routes into Core-owned permission operations
 
-No AVFoundation logic.
+No AVFoundation logic and no parallel permission state.
 
 ---
 
