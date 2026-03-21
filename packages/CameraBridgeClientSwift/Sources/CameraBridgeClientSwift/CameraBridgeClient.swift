@@ -18,6 +18,48 @@ public struct CameraBridgePermissionRequestResult: Sendable, Equatable {
     }
 }
 
+public enum CameraBridgeDevicePosition: String, Sendable, CaseIterable, Equatable {
+    case front
+    case back
+    case external
+}
+
+public struct CameraBridgeDevice: Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var position: CameraBridgeDevicePosition
+
+    public init(id: String, name: String, position: CameraBridgeDevicePosition) {
+        self.id = id
+        self.name = name
+        self.position = position
+    }
+}
+
+public enum CameraBridgeSessionState: String, Sendable, CaseIterable, Equatable {
+    case stopped
+    case running
+}
+
+public struct CameraBridgeSessionSnapshot: Sendable, Equatable {
+    public var state: CameraBridgeSessionState
+    public var activeDeviceID: String?
+    public var ownerID: String?
+    public var lastError: String?
+
+    public init(
+        state: CameraBridgeSessionState,
+        activeDeviceID: String?,
+        ownerID: String?,
+        lastError: String?
+    ) {
+        self.state = state
+        self.activeDeviceID = activeDeviceID
+        self.ownerID = ownerID
+        self.lastError = lastError
+    }
+}
+
 public struct CameraBridgeHealthResponse: Sendable, Equatable, Decodable {
     public var status: String
 
@@ -99,6 +141,40 @@ public struct CameraBridgeClient {
         return CameraBridgePermissionRequestResult(status: status, prompted: response.prompted)
     }
 
+    public func devices() async throws -> [CameraBridgeDevice] {
+        let response: DevicesResponse = try await send(
+            method: "GET",
+            path: "/v1/devices",
+            requiresAuthorization: false
+        )
+
+        return try response.devices.map { device in
+            guard let position = CameraBridgeDevicePosition(rawValue: device.position) else {
+                throw CameraBridgeClientError.invalidStatus(device.position)
+            }
+
+            return CameraBridgeDevice(id: device.id, name: device.name, position: position)
+        }
+    }
+
+    public func sessionState() async throws -> CameraBridgeSessionSnapshot {
+        let response: SessionStateResponse = try await send(
+            method: "GET",
+            path: "/v1/session",
+            requiresAuthorization: false
+        )
+        guard let state = CameraBridgeSessionState(rawValue: response.state) else {
+            throw CameraBridgeClientError.invalidStatus(response.state)
+        }
+
+        return CameraBridgeSessionSnapshot(
+            state: state,
+            activeDeviceID: response.activeDeviceID,
+            ownerID: response.ownerID,
+            lastError: response.lastError
+        )
+    }
+
     private func send<Response: Decodable>(
         method: String,
         path: String,
@@ -154,6 +230,30 @@ private struct PermissionStatusResponse: Decodable {
 private struct PermissionRequestResponse: Decodable {
     var status: String
     var prompted: Bool
+}
+
+private struct DevicesResponse: Decodable {
+    var devices: [DeviceResponse]
+}
+
+private struct DeviceResponse: Decodable {
+    var id: String
+    var name: String
+    var position: String
+}
+
+private struct SessionStateResponse: Decodable {
+    var state: String
+    var activeDeviceID: String?
+    var ownerID: String?
+    var lastError: String?
+
+    enum CodingKeys: String, CodingKey {
+        case state
+        case activeDeviceID = "active_device_id"
+        case ownerID = "owner_id"
+        case lastError = "last_error"
+    }
 }
 
 private struct APIErrorResponse: Decodable {
