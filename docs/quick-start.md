@@ -49,7 +49,8 @@ From the menu bar app:
 1. click `Start Service`
 2. confirm the app shows `Service: running`
 3. click `Request Camera Access` if permission is still undecided
-4. confirm the app shows `Permission: authorized`
+4. allow the macOS camera prompt shown by `CameraBridgeApp`
+5. confirm the app shows `Permission: authorized`
 
 When `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at:
 
@@ -58,6 +59,15 @@ When `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the lo
 ```
 
 The packaged app uses that same daemon-owned token contract when it launches the bundled service.
+
+`CameraBridgeApp` also writes the current permission state to:
+
+```text
+~/Library/Application Support/CameraBridge/permission-state
+```
+
+The daemon consumes that stored state for `/v1/permissions`,
+`/v1/permissions/request`, and the session-start permission precondition.
 
 The packaged app starts `camd` as a localhost-only service intended to be reachable from other local clients at `127.0.0.1:8731`.
 
@@ -74,8 +84,16 @@ Check the service health and current permission state:
 ```bash
 curl -s http://127.0.0.1:8731/health
 curl -s http://127.0.0.1:8731/v1/permissions
+curl -s -X POST http://127.0.0.1:8731/v1/permissions/request \
+  -H "Authorization: Bearer $(cat ~/Library/Application\\ Support/CameraBridge/auth-token)" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
 curl -s http://127.0.0.1:8731/v1/devices
 ```
+
+If permission is already decided, `POST /v1/permissions/request` returns the
+stored state with `prompted: false`. If it returns `409 invalid_state`, go back
+to the menu bar app and request access there.
 
 The mutating endpoints use the bearer token from Application Support:
 

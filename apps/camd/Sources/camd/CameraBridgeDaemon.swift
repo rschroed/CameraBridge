@@ -52,7 +52,11 @@ struct CameraBridgeDaemon {
 
     private func defaultRouter() throws -> CameraBridgeRouter {
         let deviceListing = AVFoundationCameraDeviceListing()
+        let permissionStateStore = DefaultCameraBridgePermissionStateStore()
+        let permissionStatusProvider = StoredPermissionStatusProvider(permissionStateStore: permissionStateStore)
         let sessionController = DefaultCameraSessionController(
+            permissionStatusProvider: permissionStatusProvider,
+            permissionRequester: StoredPermissionRequester(permissionStatusProvider: permissionStatusProvider),
             deviceListing: deviceListing,
             photoProducer: AVFoundationStillPhotoProducer(),
             artifactStore: DefaultPhotoArtifactStore()
@@ -60,7 +64,7 @@ struct CameraBridgeDaemon {
         let authToken = try configuration.resolvedAuthToken()
         return CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
-                permissionController: sessionController,
+                permissionStatusProvider: sessionController,
                 deviceListing: sessionController,
                 cameraStateProvider: sessionController,
                 deviceSelector: sessionController,
@@ -87,5 +91,45 @@ struct CameraBridgeDaemon {
         let port = try server.start()
         logger("camd ready on \(configuration.host):\(port)")
         return server
+    }
+}
+
+struct StoredPermissionStatusProvider: CameraPermissionStatusProviding, @unchecked Sendable {
+    let permissionStateStore: DefaultCameraBridgePermissionStateStore
+
+    func currentPermissionState() -> PermissionState {
+        do {
+            return PermissionState(storedPermissionState: try permissionStateStore.loadPermissionState())
+        } catch {
+            return .notDetermined
+        }
+    }
+}
+
+struct StoredPermissionRequester: CameraPermissionRequesting {
+    let permissionStatusProvider: any CameraPermissionStatusProviding
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        completion(
+            PermissionRequestResult(
+                status: permissionStatusProvider.currentPermissionState(),
+                prompted: false
+            )
+        )
+    }
+}
+
+extension PermissionState {
+    init(storedPermissionState: CameraBridgeStoredPermissionState) {
+        switch storedPermissionState {
+        case .notDetermined:
+            self = .notDetermined
+        case .restricted:
+            self = .restricted
+        case .denied:
+            self = .denied
+        case .authorized:
+            self = .authorized
+        }
     }
 }

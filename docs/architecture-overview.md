@@ -137,6 +137,8 @@ No domain logic.
 - menu bar UI
 - onboarding
 - status display
+- app-owned camera permission prompting
+- permission-state sync to Application Support
 
 No backend logic.
 

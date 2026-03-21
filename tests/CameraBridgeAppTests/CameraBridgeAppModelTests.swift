@@ -1,31 +1,43 @@
 import CameraBridgeClientSwift
+import CameraBridgeSupport
 import Foundation
 import Testing
 @testable import CameraBridgeApp
 
 @Test
 @MainActor
-func stoppedServiceStateShowsStartGuidance() async {
+func stoppedServiceStateShowsLocalPermissionGuidance() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(false)
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: FakeServiceLauncher())
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .notDetermined)
+    let permissionStateStore = FakePermissionStateStore()
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: FakeServiceLauncher()
+    )
 
     await model.refreshNow()
 
     #expect(model.statusSummaryTitle == "Local service is stopped")
     #expect(model.serviceStatusTitle == "Stopped")
-    #expect(model.permissionStatusTitle == "Unavailable")
-    #expect(model.guidanceMessage == "Start the local service to check camera permissions and finish onboarding.")
+    #expect(model.permissionStatusTitle == "Not Determined")
+    #expect(
+        model.guidanceMessage ==
+        "Request camera access from CameraBridge, then start the local service to finish onboarding."
+    )
     #expect(model.canStartService)
-    #expect(!model.canRequestCameraAccess)
+    #expect(model.canRequestCameraAccess)
     #expect(model.lastErrorMessage == nil)
+    #expect(permissionStateStore.savedStates == [.notDetermined])
 }
 
 @Test(arguments: [
     (
         CameraBridgePermissionStatus.notDetermined,
         "Camera access setup is incomplete",
-        "Request camera access to complete the app-owned onboarding flow."
+        "Request camera access from CameraBridge to continue."
     ),
     (
         CameraBridgePermissionStatus.restricted,
@@ -44,15 +56,21 @@ func stoppedServiceStateShowsStartGuidance() async {
     ),
 ])
 @MainActor
-func runningServiceShowsPermissionSpecificGuidance(
+func runningServiceShowsAppLocalPermissionGuidance(
     permissionStatus: CameraBridgePermissionStatus,
     expectedSummary: String,
     expectedGuidance: String
 ) async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(true)
-    await client.setPermissionStatus(.success(permissionStatus))
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: FakeServiceLauncher())
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: permissionStatus)
+    let permissionStateStore = FakePermissionStateStore()
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: FakeServiceLauncher()
+    )
 
     await model.refreshNow()
 
@@ -60,45 +78,58 @@ func runningServiceShowsPermissionSpecificGuidance(
     #expect(model.permissionStatusTitle == permissionStatusTitle(permissionStatus))
     #expect(model.statusSummaryTitle == expectedSummary)
     #expect(model.guidanceMessage == expectedGuidance)
+    #expect(permissionStateStore.savedStates == [.init(permissionStatus: permissionStatus)])
 }
 
 @Test
 @MainActor
-func startServiceFailureShowsErrorState() async {
+func startServiceFailurePreservesLocalPermissionState() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(false)
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .notDetermined)
+    let permissionStateStore = FakePermissionStateStore()
     let launcher = FakeServiceLauncher()
     launcher.error = CameraBridgeServiceLaunchError.failedToStartService
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: launcher)
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: launcher
+    )
 
     await model.startServiceNow()
 
     #expect(model.serviceStatusTitle == "Needs Attention")
-    #expect(model.guidanceMessage == "Start the local service to check camera permissions and finish onboarding.")
+    #expect(model.permissionStatusTitle == "Not Determined")
+    #expect(
+        model.guidanceMessage ==
+        "Request camera access from CameraBridge, then start the local service to finish onboarding."
+    )
     #expect(model.lastErrorMessage == "Service did not become healthy after launch")
     #expect(model.canStartService)
 }
 
 @Test
 @MainActor
-func permissionRequestFailureShowsErrorAndKeepsActionAvailable() async {
+func permissionStateSyncFailureShowsErrorWhileKeepingActionAvailable() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(true)
-    await client.setPermissionStatus(.success(.notDetermined))
-    await client.setRequestPermissionResult(.failure(CameraBridgeClientError.requestFailed(
-        statusCode: 401,
-        code: "unauthorized",
-        message: "Bearer token missing or invalid"
-    )))
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: FakeServiceLauncher())
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .notDetermined)
+    let permissionStateStore = FakePermissionStateStore()
+    permissionStateStore.error = CameraBridgePermissionStateStoreError.invalidPermissionStateFile
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: FakeServiceLauncher()
+    )
 
     await model.refreshNow()
-    await model.requestCameraAccessNow()
 
-    #expect(model.permissionStatusTitle == "Unavailable")
-    #expect(model.statusSummaryTitle == "Service is running")
-    #expect(model.guidanceMessage == "The service is running, but permission status could not be loaded.")
-    #expect(model.lastErrorMessage == "Bearer token missing or invalid")
+    #expect(model.permissionStatusTitle == "Not Determined")
+    #expect(model.statusSummaryTitle == "Camera access setup is incomplete")
+    #expect(model.guidanceMessage == "Request camera access from CameraBridge to continue.")
+    #expect(model.lastErrorMessage == "Stored permission state is invalid")
     #expect(model.canRequestCameraAccess)
 }
 
@@ -107,8 +138,15 @@ func permissionRequestFailureShowsErrorAndKeepsActionAvailable() async {
 func startServiceDisablesActionWhileLaunchIsInFlight() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(false)
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .authorized)
+    let permissionStateStore = FakePermissionStateStore()
     let launcher = FakeServiceLauncher()
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: launcher)
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: launcher
+    )
 
     let task = Task {
         await model.startServiceNow()
@@ -120,21 +158,26 @@ func startServiceDisablesActionWhileLaunchIsInFlight() async {
     #expect(!model.canStartService)
 
     await client.setServiceIsRunning(true)
-    await client.setPermissionStatus(.success(.authorized))
     launcher.finish()
     await task.value
 
     #expect(model.serviceStatusTitle == "Running")
-    #expect(model.canRequestCameraAccess)
+    #expect(!model.canRequestCameraAccess)
 }
 
 @Test
 @MainActor
-func permissionRequestDisablesActionWhilePromptIsInFlight() async {
+func permissionRequestDisablesActionWhilePromptIsInFlightAndSyncsAuthorizedState() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(true)
-    await client.setPermissionStatus(.success(.notDetermined))
-    let model = CameraBridgeAppModel(client: client, serviceLauncher: FakeServiceLauncher())
+    let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .notDetermined)
+    let permissionStateStore = FakePermissionStateStore()
+    let model = CameraBridgeAppModel(
+        client: client,
+        permissionController: permissionController,
+        permissionStateStore: permissionStateStore,
+        serviceLauncher: FakeServiceLauncher()
+    )
 
     await model.refreshNow()
     let task = Task {
@@ -146,13 +189,16 @@ func permissionRequestDisablesActionWhilePromptIsInFlight() async {
     #expect(model.statusSummaryTitle == "Waiting for camera access")
     #expect(!model.canRequestCameraAccess)
 
-    await client.setRequestPermissionResult(.success(.init(status: .authorized, prompted: true)))
-    await client.setPermissionStatus(.success(.authorized))
+    permissionController.finishRequest(with: .init(status: .authorized, prompted: true))
     await task.value
 
     #expect(model.permissionStatusTitle == "Authorized")
     #expect(model.statusSummaryTitle == "CameraBridge is ready")
-    #expect(model.canRequestCameraAccess)
+    #expect(model.guidanceMessage == "The service is running and camera access is available.")
+    #expect(model.lastErrorMessage == nil)
+    #expect(permissionController.requestCount == 1)
+    #expect(permissionStateStore.savedStates == [.notDetermined, .authorized, .authorized])
+    #expect(!model.canRequestCameraAccess)
 }
 
 private func permissionStatusTitle(_ status: CameraBridgePermissionStatus) -> String {
@@ -170,35 +216,59 @@ private func permissionStatusTitle(_ status: CameraBridgePermissionStatus) -> St
 
 private actor FakeCameraBridgeAppClient: CameraBridgeAppClient {
     private var isRunning = false
-    private var permissionStatusResult: Result<CameraBridgePermissionStatus, Error> = .success(.notDetermined)
-    private var requestPermissionResult: Result<CameraBridgePermissionRequestResult, Error>?
 
     func setServiceIsRunning(_ value: Bool) {
         isRunning = value
     }
 
-    func setPermissionStatus(_ result: Result<CameraBridgePermissionStatus, Error>) {
-        permissionStatusResult = result
-    }
-
-    func setRequestPermissionResult(_ result: Result<CameraBridgePermissionRequestResult, Error>) {
-        requestPermissionResult = result
-    }
-
     func serviceIsRunning() async -> Bool {
         isRunning
     }
+}
 
-    func permissionStatus() async throws -> CameraBridgePermissionStatus {
-        try permissionStatusResult.get()
+@MainActor
+private final class FakeCameraBridgeAppPermissionController: CameraBridgeAppPermissionControlling {
+    private(set) var requestCount = 0
+    private var requestResult: CameraBridgePermissionRequestResult?
+    var currentStatus: CameraBridgePermissionStatus
+
+    init(currentStatus: CameraBridgePermissionStatus) {
+        self.currentStatus = currentStatus
     }
 
-    func requestPermission() async throws -> CameraBridgePermissionRequestResult {
-        while requestPermissionResult == nil {
+    func currentPermissionStatus() -> CameraBridgePermissionStatus {
+        currentStatus
+    }
+
+    func requestPermission() async -> CameraBridgePermissionRequestResult {
+        requestCount += 1
+
+        while requestResult == nil {
             await Task.yield()
         }
 
-        return try requestPermissionResult!.get()
+        let result = requestResult!
+        currentStatus = result.status
+        requestResult = nil
+        return result
+    }
+
+    func finishRequest(with result: CameraBridgePermissionRequestResult) {
+        requestResult = result
+        currentStatus = result.status
+    }
+}
+
+private final class FakePermissionStateStore: CameraBridgePermissionStateWriting {
+    var savedStates: [CameraBridgeStoredPermissionState] = []
+    var error: Error?
+
+    func savePermissionState(_ state: CameraBridgeStoredPermissionState) throws {
+        if let error {
+            throw error
+        }
+
+        savedStates.append(state)
     }
 }
 
@@ -220,5 +290,20 @@ private final class FakeServiceLauncher: CameraBridgeServiceLaunching {
     func finish() {
         continuation?.resume()
         continuation = nil
+    }
+}
+
+private extension CameraBridgeStoredPermissionState {
+    init(permissionStatus: CameraBridgePermissionStatus) {
+        switch permissionStatus {
+        case .notDetermined:
+            self = .notDetermined
+        case .restricted:
+            self = .restricted
+        case .denied:
+            self = .denied
+        case .authorized:
+            self = .authorized
+        }
     }
 }
