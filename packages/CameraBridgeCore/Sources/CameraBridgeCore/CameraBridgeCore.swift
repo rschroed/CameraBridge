@@ -91,6 +91,8 @@ public protocol CameraPermissionRequesting: Sendable {
     func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void)
 }
 
+public protocol CameraPermissionControlling: CameraPermissionStatusProviding, CameraPermissionRequesting {}
+
 public protocol CameraStateProviding: Sendable {
     func currentCameraState() -> CameraState
 }
@@ -348,7 +350,9 @@ public struct DefaultCameraStateProvider: CameraStateProviding {
     }
 }
 
-public final class DefaultCameraSessionController: CameraStateProviding, CameraDeviceListing, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, CameraPhotoCapturing, @unchecked Sendable {
+public final class DefaultCameraSessionController: CameraPermissionControlling, CameraStateProviding, CameraDeviceListing, CameraDeviceSelecting, CameraSessionStarting, CameraSessionStopping, CameraPhotoCapturing, @unchecked Sendable {
+    private let permissionStatusProvider: any CameraPermissionStatusProviding
+    private let permissionRequester: any CameraPermissionRequesting
     private let deviceListing: any CameraDeviceListing
     private let photoProducer: any CameraStillPhotoProducing
     private let artifactStore: any PhotoArtifactStoring
@@ -357,12 +361,16 @@ public final class DefaultCameraSessionController: CameraStateProviding, CameraD
     private var state: CameraState
 
     public init(
+        permissionStatusProvider: any CameraPermissionStatusProviding = AVFoundationCameraPermissionStatusProvider(),
+        permissionRequester: any CameraPermissionRequesting = AVFoundationCameraPermissionRequester(),
         deviceListing: any CameraDeviceListing,
         photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
         artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(),
         now: @escaping @Sendable () -> Date = { Date() },
         initialState: CameraState = CameraState()
     ) {
+        self.permissionStatusProvider = permissionStatusProvider
+        self.permissionRequester = permissionRequester
         self.deviceListing = deviceListing
         self.photoProducer = photoProducer
         self.artifactStore = artifactStore
@@ -370,10 +378,51 @@ public final class DefaultCameraSessionController: CameraStateProviding, CameraD
         self.state = initialState
     }
 
+    public convenience init(
+        deviceListing: any CameraDeviceListing,
+        photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+        artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(),
+        now: @escaping @Sendable () -> Date = { Date() },
+        initialState: CameraState = CameraState()
+    ) {
+        self.init(
+            permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
+            permissionRequester: AVFoundationCameraPermissionRequester(),
+            deviceListing: deviceListing,
+            photoProducer: photoProducer,
+            artifactStore: artifactStore,
+            now: now,
+            initialState: initialState
+        )
+    }
+
     public func currentCameraState() -> CameraState {
         stateLock.lock()
         defer { stateLock.unlock() }
         return state
+    }
+
+    public func currentPermissionState() -> PermissionState {
+        let permissionState = permissionStatusProvider.currentPermissionState()
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        state.permissionState = permissionState
+        return permissionState
+    }
+
+    public func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        permissionRequester.requestPermission { [weak self] result in
+            guard let self else {
+                completion(result)
+                return
+            }
+
+            self.stateLock.lock()
+            self.state.permissionState = result.status
+            self.state.lastError = nil
+            self.stateLock.unlock()
+            completion(result)
+        }
     }
 
     public func availableDevices() -> [CameraDevice] {

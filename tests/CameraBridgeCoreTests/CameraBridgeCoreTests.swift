@@ -1,4 +1,5 @@
 import AVFoundation
+import Dispatch
 import Foundation
 import Testing
 @testable import CameraBridgeCore
@@ -98,6 +99,43 @@ func defaultCameraStateProviderReturnsConfiguredState() {
     let provider = DefaultCameraStateProvider(state: state)
 
     #expect(provider.currentCameraState() == state)
+}
+
+@Test
+func defaultCameraSessionControllerSyncsPermissionStateFromProvider() {
+    let controller = DefaultCameraSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
+        permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: false)),
+        deviceListing: FixedDeviceListing(devices: [])
+    )
+
+    let permissionState = controller.currentPermissionState()
+
+    #expect(permissionState == .restricted)
+    #expect(controller.currentCameraState().permissionState == .restricted)
+}
+
+@Test
+func defaultCameraSessionControllerUpdatesPermissionStateWhenRequestingPermission() {
+    let controller = DefaultCameraSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined),
+        permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: true)),
+        deviceListing: FixedDeviceListing(devices: []),
+        initialState: CameraState(lastError: CameraStateError(message: "stale error"))
+    )
+    let semaphore = DispatchSemaphore(value: 0)
+    let expectedResult = PermissionRequestResult(status: .authorized, prompted: true)
+    let resultBox = PermissionRequestResultBox()
+
+    controller.requestPermission { result in
+        resultBox.result = result
+        semaphore.signal()
+    }
+
+    #expect(semaphore.wait(timeout: .now() + 1) == .success)
+    #expect(resultBox.result == expectedResult)
+    #expect(controller.currentCameraState().permissionState == .authorized)
+    #expect(controller.currentCameraState().lastError == nil)
 }
 
 @Test
@@ -494,6 +532,26 @@ private struct FixedDeviceListing: CameraDeviceListing {
     func availableDevices() -> [CameraDevice] {
         devices
     }
+}
+
+private struct FixedPermissionStatusProvider: CameraPermissionStatusProviding {
+    let state: PermissionState
+
+    func currentPermissionState() -> PermissionState {
+        state
+    }
+}
+
+private struct FixedPermissionRequester: CameraPermissionRequesting {
+    let result: PermissionRequestResult
+
+    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
+        completion(result)
+    }
+}
+
+private final class PermissionRequestResultBox: @unchecked Sendable {
+    var result: PermissionRequestResult?
 }
 
 private struct FixedStillPhotoProducer: CameraStillPhotoProducing {
