@@ -68,5 +68,10 @@ let package = Package(
             dependencies: ["CameraBridgeClientSwift"],
             path: "tests/CameraBridgeClientSwiftTests"
         ),
+        .testTarget(
+            name: "CameraBridgeAppTests",
+            dependencies: ["CameraBridgeApp"],
+            path: "tests/CameraBridgeAppTests"
+        ),
     ]
 )

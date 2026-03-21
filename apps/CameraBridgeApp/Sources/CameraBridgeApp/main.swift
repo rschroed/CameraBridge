@@ -52,17 +52,23 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
 
+        menu.addItem(disabledItem(title: "CameraBridge"))
+        menu.addItem(disabledItem(title: model.statusSummaryTitle))
+        menu.addItem(.separator())
+
         menu.addItem(disabledItem(title: "Service: \(model.serviceStatusTitle)"))
         menu.addItem(disabledItem(title: "Permission: \(model.permissionStatusTitle)"))
+        menu.addItem(disabledItem(title: model.guidanceMessage))
 
         if let lastError = model.lastErrorMessage {
+            menu.addItem(.separator())
             menu.addItem(disabledItem(title: "Last error: \(lastError)"))
         }
 
         menu.addItem(.separator())
 
         let startServiceItem = NSMenuItem(
-            title: "Start Service",
+            title: "Start CameraBridge Service",
             action: #selector(startService(_:)),
             keyEquivalent: ""
         )
