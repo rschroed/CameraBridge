@@ -160,7 +160,10 @@ func routerRejectsPermissionRequestWithoutBearerToken() {
 @Test
 func routerReturnsPermissionRequestResultForAuthorizedRequest() {
     let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
-    let sessionController = makeSessionController(permissionRequester: requester)
+    let sessionController = makeSessionController(
+        state: CameraState(permissionState: .denied),
+        permissionRequester: requester
+    )
     let router = makeRouter(sessionController: sessionController)
     let response = router.response(
         for: HTTPRequest(
@@ -173,6 +176,7 @@ func routerReturnsPermissionRequestResultForAuthorizedRequest() {
     #expect(response.statusCode == 200)
     #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":true,"status":"authorized"}"#)
     #expect(requester.requestCount == 1)
+    #expect(sessionController.currentCameraState().permissionState == .authorized)
 }
 
 @Test
@@ -197,6 +201,7 @@ func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async t
 
     #expect(httpResponse.statusCode == 200)
     #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":true,"status":"denied"}"#)
+    #expect(sessionController.currentCameraState().permissionState == .denied)
 }
 
 @Test
@@ -364,7 +369,7 @@ func routerRejectsSessionStartWithoutSelectedDevice() {
 @Test
 func routerRejectsSessionStartWithoutAuthorizedPermission() {
     let sessionController = makeSessionController(
-        state: CameraState(activeDeviceID: "camera-1"),
+        state: CameraState(permissionState: .authorized, activeDeviceID: "camera-1"),
         permissionStatusProvider: FixedPermissionStatusProvider(state: .denied)
     )
     let router = makeRouter(sessionController: sessionController)
@@ -382,6 +387,21 @@ func routerRejectsSessionStartWithoutAuthorizedPermission() {
         String(decoding: response.body, as: UTF8.self) ==
         #"{"error":{"code":"invalid_state","message":"Camera permission is denied"}}"#
     )
+}
+
+@Test
+func routerReturnsPermissionStatusAndSyncsSessionStateFromController() {
+    let sessionController = makeSessionController(
+        state: CameraState(permissionState: .authorized),
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted)
+    )
+    let router = makeRouter(sessionController: sessionController)
+
+    let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{ "status": "restricted" }"#)
+    #expect(sessionController.currentCameraState().permissionState == .restricted)
 }
 
 @Test

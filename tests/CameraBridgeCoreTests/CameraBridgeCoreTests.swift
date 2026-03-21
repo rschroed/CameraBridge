@@ -106,7 +106,8 @@ func defaultCameraSessionControllerSyncsPermissionStateFromProvider() {
     let controller = DefaultCameraSessionController(
         permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted),
         permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: false)),
-        deviceListing: FixedDeviceListing(devices: [])
+        deviceListing: FixedDeviceListing(devices: []),
+        initialState: CameraState(permissionState: .authorized)
     )
 
     let permissionState = controller.currentPermissionState()
@@ -121,7 +122,10 @@ func defaultCameraSessionControllerUpdatesPermissionStateWhenRequestingPermissio
         permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined),
         permissionRequester: FixedPermissionRequester(result: .init(status: .authorized, prompted: true)),
         deviceListing: FixedDeviceListing(devices: []),
-        initialState: CameraState(lastError: CameraStateError(message: "stale error"))
+        initialState: CameraState(
+            permissionState: .denied,
+            lastError: CameraStateError(message: "stale error")
+        )
     )
     let semaphore = DispatchSemaphore(value: 0)
     let expectedResult = PermissionRequestResult(status: .authorized, prompted: true)
