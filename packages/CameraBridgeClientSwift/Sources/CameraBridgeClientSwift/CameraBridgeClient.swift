@@ -60,6 +60,18 @@ public struct CameraBridgeSessionSnapshot: Sendable, Equatable {
     }
 }
 
+public struct CameraBridgeCapturedPhotoArtifact: Sendable, Equatable {
+    public var localPath: String
+    public var capturedAt: Date
+    public var deviceID: String
+
+    public init(localPath: String, capturedAt: Date, deviceID: String) {
+        self.localPath = localPath
+        self.capturedAt = capturedAt
+        self.deviceID = deviceID
+    }
+}
+
 public struct CameraBridgeHealthResponse: Sendable, Equatable, Decodable {
     public var status: String
 
@@ -196,6 +208,24 @@ public struct CameraBridgeClient {
         return try makeSessionSnapshot(from: response)
     }
 
+    public func capturePhoto(ownerID: String) async throws -> CameraBridgeCapturedPhotoArtifact {
+        let response: PhotoCaptureResponse = try await send(
+            method: "POST",
+            path: "/v1/capture/photo",
+            requiresAuthorization: true,
+            requestBody: SessionOwnerRequest(ownerID: ownerID)
+        )
+        guard let capturedAt = iso8601DateFormatter.date(from: response.capturedAt) else {
+            throw CameraBridgeClientError.invalidResponse
+        }
+
+        return CameraBridgeCapturedPhotoArtifact(
+            localPath: response.localPath,
+            capturedAt: capturedAt,
+            deviceID: response.deviceID
+        )
+    }
+
     private func send<Response: Decodable>(
         method: String,
         path: String,
@@ -308,6 +338,18 @@ private struct SessionStateResponse: Decodable {
     }
 }
 
+private struct PhotoCaptureResponse: Decodable {
+    var localPath: String
+    var capturedAt: String
+    var deviceID: String
+
+    enum CodingKeys: String, CodingKey {
+        case localPath = "local_path"
+        case capturedAt = "captured_at"
+        case deviceID = "device_id"
+    }
+}
+
 private struct APIErrorResponse: Decodable {
     var error: APIError
 }
@@ -316,3 +358,9 @@ private struct APIError: Decodable {
     var code: String
     var message: String
 }
+
+private let iso8601DateFormatter: ISO8601DateFormatter = {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
+}()

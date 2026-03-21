@@ -291,6 +291,59 @@ func stopSessionSurfacesAPIErrorDetails() async {
     }
 }
 
+@Test
+func capturePhotoSendsBearerTokenAndParsesArtifactMetadata() async throws {
+    let capturedAt = makeFractionalSecondISO8601Formatter().date(from: "2024-03-09T16:00:00.123Z")!
+    let recorder = RequestRecorder()
+    let client = CameraBridgeClient(
+        tokenProvider: { "test-token" },
+        transport: { request in
+            await recorder.record(request)
+            return (
+                Data(#"{"local_path":"/tmp/capture.jpg","captured_at":"2024-03-09T16:00:00.123Z","device_id":"camera-1"}"#.utf8),
+                makeHTTPResponse(for: request, statusCode: 200)
+            )
+        }
+    )
+
+    let artifact = try await client.capturePhoto(ownerID: "client-1")
+    let recordedRequest = await recorder.currentRequest()
+
+    #expect(artifact == .init(
+        localPath: "/tmp/capture.jpg",
+        capturedAt: capturedAt,
+        deviceID: "camera-1"
+    ))
+    #expect(recordedRequest?.method == "POST")
+    #expect(recordedRequest?.url == "http://127.0.0.1:8731/v1/capture/photo")
+    #expect(recordedRequest?.authorization == "Bearer test-token")
+    #expect(recordedRequest?.contentType == "application/json")
+    #expect(recordedRequest?.body == Data(#"{"owner_id":"client-1"}"#.utf8))
+}
+
+@Test
+func capturePhotoSurfacesInvalidTimestampResponse() async {
+    let client = CameraBridgeClient(
+        tokenProvider: { "test-token" },
+        transport: { request in
+            (
+                Data(#"{"local_path":"/tmp/capture.jpg","captured_at":"not-a-date","device_id":"camera-1"}"#.utf8),
+                makeHTTPResponse(for: request, statusCode: 200)
+            )
+        }
+    )
+
+    await #expect(throws: CameraBridgeClientError.invalidResponse) {
+        _ = try await client.capturePhoto(ownerID: "client-1")
+    }
+}
+
 private func makeHTTPResponse(for request: URLRequest, statusCode: Int) -> HTTPURLResponse {
     HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+}
+
+private func makeFractionalSecondISO8601Formatter() -> ISO8601DateFormatter {
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return formatter
 }
