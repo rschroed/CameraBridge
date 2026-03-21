@@ -16,7 +16,8 @@ The repository currently includes early daemon and API slices for health,
 permission status and request, device listing and selection, session state,
 basic session lifecycle control, and still photo capture with local artifact
 metadata, plus a minimal menu bar app shell, with the remaining v1 surface
-defined in the docs.
+defined in the docs. Preview transport, example clients, and fuller onboarding
+UI are still in progress.
 
 ## v1 Auth And Ownership
 
