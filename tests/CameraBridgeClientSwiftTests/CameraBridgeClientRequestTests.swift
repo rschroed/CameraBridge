@@ -207,7 +207,10 @@ func selectDeviceSendsBearerTokenAndSelectionPayload() async throws {
     #expect(recordedRequest?.url == "http://127.0.0.1:8731/v1/session/select-device")
     #expect(recordedRequest?.authorization == "Bearer test-token")
     #expect(recordedRequest?.contentType == "application/json")
-    #expect(recordedRequest?.body == Data(#"{"device_id":"camera-1","owner_id":"client-1"}"#.utf8))
+    #expect(try decodedJSONObject(recordedRequest?.body) == [
+        "device_id": "camera-1",
+        "owner_id": "client-1",
+    ])
 }
 
 @Test
@@ -340,6 +343,14 @@ func capturePhotoSurfacesInvalidTimestampResponse() async {
 
 private func makeHTTPResponse(for request: URLRequest, statusCode: Int) -> HTTPURLResponse {
     HTTPURLResponse(url: request.url!, statusCode: statusCode, httpVersion: nil, headerFields: nil)!
+}
+
+private func decodedJSONObject(_ data: Data?) throws -> [String: String] {
+    guard let data else {
+        return [:]
+    }
+    let object = try JSONSerialization.jsonObject(with: data)
+    return object as? [String: String] ?? [:]
 }
 
 private func makeFractionalSecondISO8601Formatter() -> ISO8601DateFormatter {
