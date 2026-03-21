@@ -133,8 +133,7 @@ public struct CameraBridgeRouter: Sendable {
 
 public enum CameraBridgeRoutes {
     public static func current(
-        permissionStatusProvider: any CameraPermissionStatusProviding,
-        permissionRequester: any CameraPermissionRequesting,
+        permissionController: any CameraPermissionControlling,
         deviceListing: any CameraDeviceListing,
         cameraStateProvider: any CameraStateProviding,
         deviceSelector: any CameraDeviceSelecting,
@@ -145,13 +144,13 @@ public enum CameraBridgeRoutes {
     ) -> [HTTPRoute] {
         [
             health(),
-            permissionStatus(provider: permissionStatusProvider),
-            permissionRequest(requester: permissionRequester, authorizer: authorizer),
+            permissionStatus(controller: permissionController),
+            permissionRequest(controller: permissionController, authorizer: authorizer),
             devices(deviceListing: deviceListing),
             sessionState(provider: cameraStateProvider),
             sessionStart(
                 starter: sessionStarter,
-                permissionStatusProvider: permissionStatusProvider,
+                permissionController: permissionController,
                 authorizer: authorizer
             ),
             sessionStop(stopper: sessionStopper, authorizer: authorizer),
@@ -166,17 +165,17 @@ public enum CameraBridgeRoutes {
         }
     }
 
-    public static func permissionStatus(provider: any CameraPermissionStatusProviding) -> HTTPRoute {
+    public static func permissionStatus(controller: any CameraPermissionStatusProviding) -> HTTPRoute {
         HTTPRoute(method: .get, path: "/v1/permissions") { _ in
             .json(
                 statusCode: 200,
-                body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
+                body: #"{ "status": "\#(controller.currentPermissionState().rawValue)" }"#
             )
         }
     }
 
     public static func permissionRequest(
-        requester: any CameraPermissionRequesting,
+        controller: any CameraPermissionRequesting,
         authorizer: any BearerTokenAuthorizing
     ) -> HTTPRoute {
         HTTPRoute(method: .post, path: "/v1/permissions/request") { request in
@@ -187,7 +186,7 @@ public enum CameraBridgeRoutes {
             let semaphore = DispatchSemaphore(value: 0)
             let resultBox = PermissionRequestResultBox()
 
-            requester.requestPermission { permissionResult in
+            controller.requestPermission { permissionResult in
                 resultBox.result = permissionResult
                 semaphore.signal()
             }
@@ -220,7 +219,7 @@ public enum CameraBridgeRoutes {
 
     public static func sessionStart(
         starter: any CameraSessionStarting,
-        permissionStatusProvider: any CameraPermissionStatusProviding,
+        permissionController: any CameraPermissionStatusProviding,
         authorizer: any BearerTokenAuthorizing
     ) -> HTTPRoute {
         HTTPRoute(method: .post, path: "/v1/session/start") { request in
@@ -243,7 +242,7 @@ public enum CameraBridgeRoutes {
             do {
                 let state = try starter.startSession(
                     ownerID: ownerID,
-                    permissionState: permissionStatusProvider.currentPermissionState()
+                    permissionState: permissionController.currentPermissionState()
                 )
                 return .json(statusCode: 200, body: SessionStateResponse(state: state))
             } catch let error as CameraSessionLifecycleError {
