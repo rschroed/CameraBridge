@@ -45,8 +45,7 @@ struct CameraBridgeDaemon {
         )
         return CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
-                permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
-                permissionRequester: AVFoundationCameraPermissionRequester(),
+                permissionController: sessionController,
                 deviceListing: sessionController,
                 cameraStateProvider: sessionController,
                 deviceSelector: sessionController,

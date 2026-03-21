@@ -110,8 +110,10 @@ func localHTTPServerStillReturnsNotFoundForUnknownRoute() async throws {
 
 @Test(arguments: PermissionState.allCases)
 func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
-    let sessionController = makeSessionController()
-    let router = makeRouter(sessionController: sessionController, permissionState: state)
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: state)
+    )
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(for: HTTPRequest(method: .get, path: "/v1/permissions"))
 
     #expect(response.statusCode == 200)
@@ -121,10 +123,12 @@ func routerReturnsPermissionStatusForProviderState(_ state: PermissionState) {
 @Test
 func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
     let port = try reserveEphemeralPort()
-    let sessionController = makeSessionController()
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted)
+    )
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: makeRouter(sessionController: sessionController, permissionState: .restricted)
+        router: makeRouter(sessionController: sessionController)
     )
 
     defer { server.stop() }
@@ -141,8 +145,8 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
 @Test
 func routerRejectsPermissionRequestWithoutBearerToken() {
     let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
-    let sessionController = makeSessionController()
-    let router = makeRouter(sessionController: sessionController, permissionRequester: requester)
+    let sessionController = makeSessionController(permissionRequester: requester)
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(for: HTTPRequest(method: .post, path: "/v1/permissions/request"))
 
     #expect(response.statusCode == 401)
@@ -156,8 +160,8 @@ func routerRejectsPermissionRequestWithoutBearerToken() {
 @Test
 func routerReturnsPermissionRequestResultForAuthorizedRequest() {
     let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
-    let sessionController = makeSessionController()
-    let router = makeRouter(sessionController: sessionController, permissionRequester: requester)
+    let sessionController = makeSessionController(permissionRequester: requester)
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(
         for: HTTPRequest(
             method: .post,
@@ -174,13 +178,12 @@ func routerReturnsPermissionRequestResultForAuthorizedRequest() {
 @Test
 func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async throws {
     let port = try reserveEphemeralPort()
-    let sessionController = makeSessionController()
+    let sessionController = makeSessionController(
+        permissionRequester: FixedPermissionRequester(result: .init(status: .denied, prompted: true))
+    )
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: makeRouter(
-            sessionController: sessionController,
-            permissionRequester: FixedPermissionRequester(result: .init(status: .denied, prompted: true))
-        )
+        router: makeRouter(sessionController: sessionController)
     )
 
     defer { server.stop() }
@@ -273,11 +276,12 @@ func localHTTPServerReturnsSessionStateWithoutAuth() async throws {
             activeDeviceID: nil,
             currentOwnerID: nil,
             lastError: nil
-        )
+        ),
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted)
     )
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
-        router: makeRouter(sessionController: sessionController, permissionState: .restricted)
+        router: makeRouter(sessionController: sessionController)
     )
 
     defer { server.stop() }
@@ -360,9 +364,10 @@ func routerRejectsSessionStartWithoutSelectedDevice() {
 @Test
 func routerRejectsSessionStartWithoutAuthorizedPermission() {
     let sessionController = makeSessionController(
-        state: CameraState(activeDeviceID: "camera-1")
+        state: CameraState(activeDeviceID: "camera-1"),
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .denied)
     )
-    let router = makeRouter(sessionController: sessionController, permissionState: .denied)
+    let router = makeRouter(sessionController: sessionController)
     let response = router.response(
         for: HTTPRequest(
             method: .post,
@@ -842,16 +847,11 @@ func localHTTPServerSupportsSessionStartThenStop() async throws {
 
 private func makeRouter(
     sessionController: DefaultCameraSessionController,
-    permissionState: PermissionState = .authorized,
-    permissionRequester: any CameraPermissionRequesting = FixedPermissionRequester(
-        result: .init(status: .authorized, prompted: false)
-    ),
     bearerToken: String = "test-token"
 ) -> CameraBridgeRouter {
     CameraBridgeRouter(
         routes: CameraBridgeRoutes.current(
-            permissionStatusProvider: FixedPermissionStatusProvider(state: permissionState),
-            permissionRequester: permissionRequester,
+            permissionController: sessionController,
             deviceListing: sessionController,
             cameraStateProvider: sessionController,
             deviceSelector: sessionController,
@@ -868,6 +868,10 @@ private func makeSessionController(
     devices: [CameraDevice] = [
         CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
     ],
+    permissionStatusProvider: any CameraPermissionStatusProviding = FixedPermissionStatusProvider(state: .authorized),
+    permissionRequester: any CameraPermissionRequesting = FixedPermissionRequester(
+        result: .init(status: .authorized, prompted: false)
+    ),
     photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
     artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(
         baseDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
@@ -876,6 +880,8 @@ private func makeSessionController(
     now: @escaping @Sendable () -> Date = { Date() }
 ) -> DefaultCameraSessionController {
     DefaultCameraSessionController(
+        permissionStatusProvider: permissionStatusProvider,
+        permissionRequester: permissionRequester,
         deviceListing: FixedDeviceListing(devices: devices),
         photoProducer: photoProducer,
         artifactStore: artifactStore,
