@@ -21,6 +21,24 @@ public enum PreviewState: Sendable, Equatable {
     case running
 }
 
+public enum CameraDevicePosition: String, Sendable, CaseIterable, Equatable {
+    case front
+    case back
+    case external
+}
+
+public struct CameraDevice: Sendable, Equatable {
+    public var id: String
+    public var name: String
+    public var position: CameraDevicePosition
+
+    public init(id: String, name: String, position: CameraDevicePosition) {
+        self.id = id
+        self.name = name
+        self.position = position
+    }
+}
+
 public struct CameraStateError: Error, Sendable, Equatable {
     public let message: String
 
@@ -55,11 +73,41 @@ public protocol CameraPermissionStatusProviding: Sendable {
     func currentPermissionState() -> PermissionState
 }
 
+public protocol CameraDeviceListing: Sendable {
+    func availableDevices() -> [CameraDevice]
+}
+
 public struct AVFoundationCameraPermissionStatusProvider: CameraPermissionStatusProviding {
     public init() {}
 
     public func currentPermissionState() -> PermissionState {
         PermissionState(authorizationStatus: AVCaptureDevice.authorizationStatus(for: .video))
+    }
+}
+
+public struct AVFoundationCameraDeviceListing: CameraDeviceListing {
+    public init() {}
+
+    public func availableDevices() -> [CameraDevice] {
+        AVCaptureDevice.DiscoverySession(
+            deviceTypes: [
+                .builtInWideAngleCamera,
+                .continuityCamera,
+                .deskViewCamera,
+                .external,
+            ],
+            mediaType: .video,
+            position: .unspecified
+        )
+        .devices
+        .map(CameraDevice.init(device:))
+        .sorted {
+            if $0.name == $1.name {
+                return $0.id < $1.id
+            }
+
+            return $0.name < $1.name
+        }
     }
 }
 
@@ -77,5 +125,30 @@ extension PermissionState {
         @unknown default:
             self = .denied
         }
+    }
+}
+
+extension CameraDevicePosition {
+    init(position: AVCaptureDevice.Position) {
+        switch position {
+        case .front:
+            self = .front
+        case .back:
+            self = .back
+        case .unspecified:
+            self = .external
+        @unknown default:
+            self = .external
+        }
+    }
+}
+
+private extension CameraDevice {
+    init(device: AVCaptureDevice) {
+        self.init(
+            id: device.uniqueID,
+            name: device.localizedName,
+            position: CameraDevicePosition(position: device.position)
+        )
     }
 }
