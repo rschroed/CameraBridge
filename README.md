@@ -25,6 +25,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 
 - read-only localhost endpoints may remain unauthenticated in the early v1 slices
 - planned mutating endpoints use a bearer token or equivalent local secret
+- when `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at `~/Library/Application Support/CameraBridge/auth-token`
 - v1 does not add separate session `claim` or `release` endpoints
 - successful `POST /v1/session/start` establishes implicit session ownership
 - session ownership is released by `POST /v1/session/stop` or when the session ends

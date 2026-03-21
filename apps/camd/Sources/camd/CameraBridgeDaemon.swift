@@ -1,5 +1,6 @@
 import CameraBridgeAPI
 import CameraBridgeCore
+import CameraBridgeSupport
 import Foundation
 
 struct ServerConfiguration: Sendable, Equatable {
@@ -20,6 +21,19 @@ struct ServerConfiguration: Sendable, Equatable {
         self.port = port
         self.authToken = authToken
     }
+
+    func resolvedAuthToken(
+        authTokenStore: DefaultCameraBridgeAuthTokenStore = DefaultCameraBridgeAuthTokenStore()
+    ) throws -> String {
+        if let authToken {
+            let trimmedToken = authToken.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedToken.isEmpty {
+                return trimmedToken
+            }
+        }
+
+        return try authTokenStore.loadOrCreateToken()
+    }
 }
 
 struct CameraBridgeDaemon {
@@ -36,13 +50,14 @@ struct CameraBridgeDaemon {
         self.logger = logger
     }
 
-    private func defaultRouter() -> CameraBridgeRouter {
+    private func defaultRouter() throws -> CameraBridgeRouter {
         let deviceListing = AVFoundationCameraDeviceListing()
         let sessionController = DefaultCameraSessionController(
             deviceListing: deviceListing,
             photoProducer: AVFoundationStillPhotoProducer(),
             artifactStore: DefaultPhotoArtifactStore()
         )
+        let authToken = try configuration.resolvedAuthToken()
         return CameraBridgeRouter(
             routes: CameraBridgeRoutes.current(
                 permissionController: sessionController,
@@ -52,15 +67,15 @@ struct CameraBridgeDaemon {
                 sessionStarter: sessionController,
                 sessionStopper: sessionController,
                 photoCapturer: sessionController,
-                authorizer: StaticBearerTokenAuthorizer(bearerToken: configuration.authToken)
+                authorizer: StaticBearerTokenAuthorizer(bearerToken: authToken)
             )
         )
     }
 
-    func makeServer(router: CameraBridgeRouter? = nil) -> LocalHTTPServer {
+    func makeServer(router: CameraBridgeRouter? = nil) throws -> LocalHTTPServer {
         LocalHTTPServer(
             configuration: .init(host: configuration.host, port: configuration.port),
-            router: router ?? defaultRouter(),
+            router: try (router ?? defaultRouter()),
             logger: logger
         )
     }
@@ -68,7 +83,7 @@ struct CameraBridgeDaemon {
     @discardableResult
     func start(router: CameraBridgeRouter? = nil) throws -> LocalHTTPServer {
         logger("starting camd on \(configuration.host):\(configuration.port)")
-        let server = makeServer(router: router)
+        let server = try makeServer(router: router)
         let port = try server.start()
         logger("camd ready on \(configuration.host):\(port)")
         return server

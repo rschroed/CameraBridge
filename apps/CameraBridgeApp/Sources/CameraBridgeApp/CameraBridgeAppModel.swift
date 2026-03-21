@@ -1,4 +1,5 @@
 import CameraBridgeClientSwift
+import CameraBridgeSupport
 import Foundation
 
 @MainActor
@@ -150,19 +151,16 @@ final class CameraBridgeAppModel {
 
     init(
         client: (any CameraBridgeAppClient)? = nil,
-        authTokenStore: any CameraBridgeAuthTokenStoring = DefaultCameraBridgeAuthTokenStore(),
+        authTokenStore: any CameraBridgeAuthTokenReading = DefaultCameraBridgeAuthTokenStore(),
         serviceLauncher: (any CameraBridgeServiceLaunching)? = nil
     ) {
         let resolvedClient = client ?? CameraBridgeClient(
             tokenProvider: {
-                try? authTokenStore.loadOrCreateToken()
+                try? authTokenStore.loadToken()
             }
         )
         self.client = resolvedClient
-        self.serviceLauncher = serviceLauncher ?? LocalCameraBridgeServiceLauncher(
-            client: resolvedClient,
-            authTokenStore: authTokenStore
-        )
+        self.serviceLauncher = serviceLauncher ?? LocalCameraBridgeServiceLauncher(client: resolvedClient)
     }
 
     func start() {
@@ -305,9 +303,11 @@ final class CameraBridgeAppModel {
     }
 }
 
-protocol CameraBridgeAuthTokenStoring {
-    func loadOrCreateToken() throws -> String
+protocol CameraBridgeAuthTokenReading {
+    func loadToken() throws -> String?
 }
+
+extension DefaultCameraBridgeAuthTokenStore: CameraBridgeAuthTokenReading {}
 
 protocol CameraBridgeAppClient {
     func serviceIsRunning() async -> Bool
@@ -316,58 +316,6 @@ protocol CameraBridgeAppClient {
 }
 
 extension CameraBridgeClient: CameraBridgeAppClient {}
-
-enum CameraBridgeAuthTokenError: LocalizedError {
-    case invalidTokenFile
-    case supportDirectoryUnavailable
-
-    var errorDescription: String? {
-        switch self {
-        case .invalidTokenFile:
-            return "Stored auth token is invalid"
-        case .supportDirectoryUnavailable:
-            return "CameraBridge support directory is unavailable"
-        }
-    }
-}
-
-struct DefaultCameraBridgeAuthTokenStore: CameraBridgeAuthTokenStoring {
-    private let fileManager = FileManager.default
-
-    func loadOrCreateToken() throws -> String {
-        let tokenURL = try authTokenURL()
-        try fileManager.createDirectory(
-            at: tokenURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
-        if fileManager.fileExists(atPath: tokenURL.path) {
-            let token = try String(contentsOf: tokenURL, encoding: .utf8)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !token.isEmpty else {
-                throw CameraBridgeAuthTokenError.invalidTokenFile
-            }
-            return token
-        }
-
-        let token = UUID().uuidString.lowercased()
-        try Data(token.utf8).write(to: tokenURL, options: .atomic)
-        try fileManager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tokenURL.path)
-        return token
-    }
-
-    private func authTokenURL() throws -> URL {
-        guard let applicationSupportURL =
-            fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        else {
-            throw CameraBridgeAuthTokenError.supportDirectoryUnavailable
-        }
-
-        return applicationSupportURL
-            .appendingPathComponent("CameraBridge", isDirectory: true)
-            .appendingPathComponent("auth-token", isDirectory: false)
-    }
-}
 
 @MainActor
 protocol CameraBridgeServiceLaunching {
@@ -393,15 +341,11 @@ enum CameraBridgeServiceLaunchError: LocalizedError {
 
 @MainActor
 final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
-    private static let authTokenEnvironmentVariable = "CAMERABRIDGE_AUTH_TOKEN"
-
     private let client: any CameraBridgeAppClient
-    private let authTokenStore: any CameraBridgeAuthTokenStoring
     private var process: Process?
 
-    init(client: any CameraBridgeAppClient, authTokenStore: any CameraBridgeAuthTokenStoring) {
+    init(client: any CameraBridgeAppClient) {
         self.client = client
-        self.authTokenStore = authTokenStore
     }
 
     func startIfNeeded() async throws {
@@ -410,17 +354,12 @@ final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
         }
 
         let daemonURL = try bundledDaemonURL()
-        let token = try authTokenStore.loadOrCreateToken()
         let logHandle = try makeLogHandle()
 
         let process = Process()
         process.executableURL = daemonURL
         process.standardOutput = logHandle
         process.standardError = logHandle
-
-        var environment = ProcessInfo.processInfo.environment
-        environment[Self.authTokenEnvironmentVariable] = token
-        process.environment = environment
 
         try process.run()
         self.process = process
