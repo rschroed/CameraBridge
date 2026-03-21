@@ -12,9 +12,11 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-Current implementation includes the local daemon, health and permission endpoints, device discovery,
-session control, still photo capture, and a minimal menu bar app shell. Preview transport,
-example clients, and fuller onboarding UI are still in progress.
+The repository currently includes early daemon and API slices for health,
+permission status and request, device listing and selection, session state,
+basic session lifecycle control, and still photo capture with local artifact
+metadata, plus a minimal menu bar app shell. Preview transport, example clients,
+and fuller onboarding UI are still in progress.
 
 ## v1 Auth And Ownership
 
