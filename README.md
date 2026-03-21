@@ -12,8 +12,9 @@ This repository is intentionally scaffolded with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The repository currently includes the earliest daemon and API slices, with the
-remaining v1 surface defined in the docs.
+Current implementation includes the local daemon, health and permission endpoints, device discovery,
+session control, still photo capture, and a minimal menu bar app shell. Preview transport,
+example clients, and fuller onboarding UI are still in progress.
 
 ## v1 Auth And Ownership
 
@@ -45,4 +46,16 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 ```bash
 swift build
 swift test
+```
+
+Package the local menu bar app bundle with:
+
+```bash
+apps/CameraBridgeApp/scripts/package-app.sh
+```
+
+The packaged app bundle is written to:
+
+```text
+$(swift build --show-bin-path)/CameraBridgeApp.app
 ```
