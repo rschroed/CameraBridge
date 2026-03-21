@@ -12,13 +12,13 @@ final class CameraBridgeAppModel {
         var title: String {
             switch self {
             case .stopped:
-                return "stopped"
+                return "Stopped"
             case .starting:
-                return "starting"
+                return "Starting"
             case .running:
-                return "running"
+                return "Running"
             case .failed:
-                return "failed"
+                return "Needs Attention"
             }
         }
 
@@ -42,17 +42,17 @@ final class CameraBridgeAppModel {
         var title: String {
             switch self {
             case .unavailable:
-                return "unavailable"
+                return "Unavailable"
             case .checking:
-                return "checking"
+                return "Requesting Access"
             case .notDetermined:
-                return "not determined"
+                return "Not Determined"
             case .restricted:
-                return "restricted"
+                return "Restricted"
             case .denied:
-                return "denied"
+                return "Denied"
             case .authorized:
-                return "authorized"
+                return "Authorized"
             }
         }
 
@@ -80,6 +80,48 @@ final class CameraBridgeAppModel {
         permissionDisplay.title
     }
 
+    var statusSummaryTitle: String {
+        switch (serviceStatus, permissionDisplay) {
+        case (.starting, _):
+            return "CameraBridge is starting"
+        case (.stopped, _):
+            return "Local service is stopped"
+        case (.failed, _):
+            return "CameraBridge needs attention"
+        case (.running, .checking):
+            return "Waiting for camera access"
+        case (.running, .notDetermined):
+            return "Camera access setup is incomplete"
+        case (.running, .restricted), (.running, .denied):
+            return "Camera access is unavailable"
+        case (.running, .authorized):
+            return "CameraBridge is ready"
+        case (.running, .unavailable):
+            return "Service is running"
+        }
+    }
+
+    var guidanceMessage: String {
+        switch (serviceStatus, permissionDisplay) {
+        case (.starting, _):
+            return "Waiting for the local CameraBridge service to respond."
+        case (.stopped, _), (.failed, _):
+            return "Start the local service to check camera permissions and finish onboarding."
+        case (.running, .checking):
+            return "Respond to the macOS camera permission prompt if it appears."
+        case (.running, .notDetermined):
+            return "Request camera access to complete the app-owned onboarding flow."
+        case (.running, .restricted):
+            return "Camera access is restricted on this Mac and cannot be granted from CameraBridge."
+        case (.running, .denied):
+            return "Camera access was denied. Re-enable it in System Settings > Privacy & Security > Camera."
+        case (.running, .authorized):
+            return "The service is running and camera access is available."
+        case (.running, .unavailable):
+            return "The service is running, but permission status could not be loaded."
+        }
+    }
+
     var lastErrorMessage: String? {
         lastError
     }
@@ -103,11 +145,11 @@ final class CameraBridgeAppModel {
     private var isRequestInFlight = false
     private var refreshTimer: Timer?
 
-    private let client: CameraBridgeClient
+    private let client: any CameraBridgeAppClient
     private let serviceLauncher: any CameraBridgeServiceLaunching
 
     init(
-        client: CameraBridgeClient? = nil,
+        client: (any CameraBridgeAppClient)? = nil,
         authTokenStore: any CameraBridgeAuthTokenStoring = DefaultCameraBridgeAuthTokenStore(),
         serviceLauncher: (any CameraBridgeServiceLaunching)? = nil
     ) {
@@ -139,20 +181,32 @@ final class CameraBridgeAppModel {
 
     func refresh() {
         Task { @MainActor in
-            await refreshState()
+            await refreshNow()
         }
     }
 
     func startService() {
         Task { @MainActor in
-            await performStartService()
+            await startServiceNow()
         }
     }
 
     func requestCameraAccess() {
         Task { @MainActor in
-            await performRequestCameraAccess()
+            await requestCameraAccessNow()
         }
+    }
+
+    func refreshNow() async {
+        await refreshState()
+    }
+
+    func startServiceNow() async {
+        await performStartService()
+    }
+
+    func requestCameraAccessNow() async {
+        await performRequestCameraAccess()
     }
 
     private func publishChange() {
@@ -255,6 +309,14 @@ protocol CameraBridgeAuthTokenStoring {
     func loadOrCreateToken() throws -> String
 }
 
+protocol CameraBridgeAppClient {
+    func serviceIsRunning() async -> Bool
+    func permissionStatus() async throws -> CameraBridgePermissionStatus
+    func requestPermission() async throws -> CameraBridgePermissionRequestResult
+}
+
+extension CameraBridgeClient: CameraBridgeAppClient {}
+
 enum CameraBridgeAuthTokenError: LocalizedError {
     case invalidTokenFile
     case supportDirectoryUnavailable
@@ -333,11 +395,11 @@ enum CameraBridgeServiceLaunchError: LocalizedError {
 final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
     private static let authTokenEnvironmentVariable = "CAMERABRIDGE_AUTH_TOKEN"
 
-    private let client: CameraBridgeClient
+    private let client: any CameraBridgeAppClient
     private let authTokenStore: any CameraBridgeAuthTokenStoring
     private var process: Process?
 
-    init(client: CameraBridgeClient, authTokenStore: any CameraBridgeAuthTokenStoring) {
+    init(client: any CameraBridgeAppClient, authTokenStore: any CameraBridgeAuthTokenStoring) {
         self.client = client
         self.authTokenStore = authTokenStore
     }
