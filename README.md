@@ -15,8 +15,9 @@ This repository is intentionally scaffolded with strict package boundaries:
 The repository currently includes early daemon and API slices for health,
 permission status and request, device listing and selection, session state,
 basic session lifecycle control, and still photo capture with local artifact
-metadata, plus a minimal menu bar app shell. Preview transport, example clients,
-and fuller onboarding UI are still in progress.
+metadata, plus a minimal menu bar app shell, with the remaining v1 surface
+defined in the docs. Preview transport, example clients, and fuller onboarding
+UI are still in progress.
 
 ## v1 Auth And Ownership
 
@@ -56,7 +57,7 @@ Package the local menu bar app bundle with:
 apps/CameraBridgeApp/scripts/package-app.sh
 ```
 
-The packaged app bundle is written to:
+The packaged app bundle, including the bundled `camd` executable, is written to:
 
 ```text
 $(swift build --show-bin-path)/CameraBridgeApp.app

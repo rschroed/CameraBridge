@@ -50,7 +50,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "CameraBridgeApp",
-            dependencies: ["CameraBridgeClientSwift", "CameraBridgeCore"],
+            dependencies: ["CameraBridgeClientSwift"],
             path: "apps/CameraBridgeApp/Sources/CameraBridgeApp"
         ),
         .testTarget(
