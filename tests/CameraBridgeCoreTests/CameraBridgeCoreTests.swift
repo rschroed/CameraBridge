@@ -27,6 +27,13 @@ func permissionStateRawValuesMatchAPIVocabulary() {
 }
 
 @Test
+func cameraDevicePositionRawValuesMatchAPIVocabulary() {
+    #expect(CameraDevicePosition.front.rawValue == "front")
+    #expect(CameraDevicePosition.back.rawValue == "back")
+    #expect(CameraDevicePosition.external.rawValue == "external")
+}
+
+@Test
 func cameraStateRetainsExplicitValues() {
     let error = CameraStateError(message: "permission unavailable")
     let state = CameraState(
@@ -50,4 +57,20 @@ func permissionStateMapsAVFoundationStatusValues() {
     #expect(PermissionState(authorizationStatus: .restricted) == .restricted)
     #expect(PermissionState(authorizationStatus: .denied) == .denied)
     #expect(PermissionState(authorizationStatus: .authorized) == .authorized)
+}
+
+@Test
+func cameraDeviceRetainsExplicitValues() {
+    let device = CameraDevice(id: "camera-1", name: "Desk Camera", position: .external)
+
+    #expect(device.id == "camera-1")
+    #expect(device.name == "Desk Camera")
+    #expect(device.position == .external)
+}
+
+@Test
+func cameraDevicePositionMapsAVFoundationPositionValues() {
+    #expect(CameraDevicePosition(position: .front) == .front)
+    #expect(CameraDevicePosition(position: .back) == .back)
+    #expect(CameraDevicePosition(position: .unspecified) == .external)
 }

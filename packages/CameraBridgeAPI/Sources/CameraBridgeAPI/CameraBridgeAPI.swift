@@ -46,6 +46,17 @@ public struct HTTPResponse: Sendable, Equatable {
         )
     }
 
+    public static func json<T: Encodable>(statusCode: Int, body: T) -> HTTPResponse {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        let data = try! encoder.encode(body)
+        return HTTPResponse(
+            statusCode: statusCode,
+            headers: ["Content-Type": "application/json"],
+            body: data
+        )
+    }
+
     public static func notFound() -> HTTPResponse {
         .json(
             statusCode: 404,
@@ -92,10 +103,14 @@ public struct CameraBridgeRouter: Sendable {
 }
 
 public enum CameraBridgeRoutes {
-    public static func current(permissionStatusProvider: any CameraPermissionStatusProviding) -> [HTTPRoute] {
+    public static func current(
+        permissionStatusProvider: any CameraPermissionStatusProviding,
+        deviceListing: any CameraDeviceListing
+    ) -> [HTTPRoute] {
         [
             health(),
             permissionStatus(provider: permissionStatusProvider),
+            devices(deviceListing: deviceListing),
         ]
     }
 
@@ -110,6 +125,15 @@ public enum CameraBridgeRoutes {
             .json(
                 statusCode: 200,
                 body: #"{ "status": "\#(provider.currentPermissionState().rawValue)" }"#
+            )
+        }
+    }
+
+    public static func devices(deviceListing: any CameraDeviceListing) -> HTTPRoute {
+        HTTPRoute(method: .get, path: "/v1/devices") { _ in
+            .json(
+                statusCode: 200,
+                body: DevicesResponse(devices: deviceListing.availableDevices())
             )
         }
     }
@@ -357,5 +381,25 @@ private enum HTTPResponseSerializer {
         default:
             return "Error"
         }
+    }
+}
+
+private struct DevicesResponse: Encodable, Equatable {
+    var devices: [DeviceResponse]
+
+    init(devices: [CameraDevice]) {
+        self.devices = devices.map(DeviceResponse.init(device:))
+    }
+}
+
+private struct DeviceResponse: Encodable, Equatable {
+    var id: String
+    var name: String
+    var position: String
+
+    init(device: CameraDevice) {
+        self.id = device.id
+        self.name = device.name
+        self.position = device.position.rawValue
     }
 }

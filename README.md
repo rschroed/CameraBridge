@@ -16,6 +16,17 @@ Current implementation includes the local daemon, health and permission endpoint
 session control, still photo capture, and a minimal menu bar app shell. Preview transport,
 example clients, and fuller onboarding UI are still in progress.
 
+## v1 Auth And Ownership
+
+CameraBridge v1 keeps the trust model intentionally narrow:
+
+- read-only localhost endpoints may remain unauthenticated in the early v1 slices
+- planned mutating endpoints use a bearer token or equivalent local secret
+- v1 does not add separate session `claim` or `release` endpoints
+- successful `POST /v1/session/start` establishes implicit session ownership
+- session ownership is released by `POST /v1/session/stop` or when the session ends
+- ownership-conflict and invalid-state failures are explicit parts of the planned contract
+
 ## Docs
 
 - [Architecture Overview](docs/architecture-overview.md)
