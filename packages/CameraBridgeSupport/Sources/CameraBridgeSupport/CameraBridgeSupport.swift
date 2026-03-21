@@ -18,6 +18,27 @@ public enum CameraBridgeAuthTokenError: LocalizedError, Equatable {
     }
 }
 
+public enum CameraBridgeStoredPermissionState: String, Sendable, CaseIterable, Equatable {
+    case notDetermined = "not_determined"
+    case restricted
+    case denied
+    case authorized
+}
+
+public enum CameraBridgePermissionStateStoreError: LocalizedError, Equatable {
+    case invalidPermissionStateFile
+    case supportDirectoryUnavailable
+
+    public var errorDescription: String? {
+        switch self {
+        case .invalidPermissionStateFile:
+            return "Stored permission state is invalid"
+        case .supportDirectoryUnavailable:
+            return "CameraBridge support directory is unavailable"
+        }
+    }
+}
+
 public struct DefaultCameraBridgeAuthTokenStore {
     public var baseDirectoryURL: URL?
 
@@ -81,5 +102,60 @@ public struct DefaultCameraBridgeAuthTokenStore {
             throw CameraBridgeAuthTokenError.invalidTokenFile
         }
         return token
+    }
+}
+
+public struct DefaultCameraBridgePermissionStateStore {
+    public var baseDirectoryURL: URL?
+
+    private let fileManager: FileManager
+
+    public init(fileManager: FileManager = .default, baseDirectoryURL: URL? = nil) {
+        self.fileManager = fileManager
+        self.baseDirectoryURL = baseDirectoryURL
+    }
+
+    public func loadPermissionState() throws -> CameraBridgeStoredPermissionState {
+        let permissionStateURL = try permissionStateURL()
+        guard fileManager.fileExists(atPath: permissionStateURL.path) else {
+            return .notDetermined
+        }
+
+        let rawValue = try String(contentsOf: permissionStateURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let state = CameraBridgeStoredPermissionState(rawValue: rawValue) else {
+            throw CameraBridgePermissionStateStoreError.invalidPermissionStateFile
+        }
+
+        return state
+    }
+
+    public func savePermissionState(_ state: CameraBridgeStoredPermissionState) throws {
+        let permissionStateURL = try permissionStateURL()
+        try fileManager.createDirectory(
+            at: permissionStateURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data(state.rawValue.utf8).write(to: permissionStateURL, options: .atomic)
+    }
+
+    public func permissionStateURL() throws -> URL {
+        try supportDirectoryURL()
+            .appendingPathComponent("permission-state", isDirectory: false)
+    }
+
+    private func supportDirectoryURL() throws -> URL {
+        if let baseDirectoryURL {
+            return baseDirectoryURL
+        }
+
+        guard let applicationSupportURL =
+            fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        else {
+            throw CameraBridgePermissionStateStoreError.supportDirectoryUnavailable
+        }
+
+        return applicationSupportURL
+            .appendingPathComponent("CameraBridge", isDirectory: true)
     }
 }

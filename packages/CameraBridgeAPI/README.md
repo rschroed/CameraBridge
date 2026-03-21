@@ -14,3 +14,7 @@ The current v1 surface includes:
 - `POST /v1/session/stop`
 - `POST /v1/session/select-device`
 - `POST /v1/capture/photo`
+
+`POST /v1/permissions/request` does not invoke the macOS permission prompt from
+the daemon. It returns the stored synced permission state and directs callers to
+`CameraBridgeApp` when permission is still undecided.

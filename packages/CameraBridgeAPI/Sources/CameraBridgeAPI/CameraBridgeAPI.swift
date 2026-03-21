@@ -133,7 +133,7 @@ public struct CameraBridgeRouter: Sendable {
 
 public enum CameraBridgeRoutes {
     public static func current(
-        permissionController: any CameraPermissionControlling,
+        permissionStatusProvider: any CameraPermissionStatusProviding,
         deviceListing: any CameraDeviceListing,
         cameraStateProvider: any CameraStateProviding,
         deviceSelector: any CameraDeviceSelecting,
@@ -144,13 +144,13 @@ public enum CameraBridgeRoutes {
     ) -> [HTTPRoute] {
         [
             health(),
-            permissionStatus(controller: permissionController),
-            permissionRequest(controller: permissionController, authorizer: authorizer),
+            permissionStatus(controller: permissionStatusProvider),
+            permissionRequest(controller: permissionStatusProvider, authorizer: authorizer),
             devices(deviceListing: deviceListing),
             sessionState(provider: cameraStateProvider),
             sessionStart(
                 starter: sessionStarter,
-                permissionController: permissionController,
+                permissionController: permissionStatusProvider,
                 authorizer: authorizer
             ),
             sessionStop(stopper: sessionStopper, authorizer: authorizer),
@@ -175,7 +175,7 @@ public enum CameraBridgeRoutes {
     }
 
     public static func permissionRequest(
-        controller: any CameraPermissionRequesting,
+        controller: any CameraPermissionStatusProviding,
         authorizer: any BearerTokenAuthorizing
     ) -> HTTPRoute {
         HTTPRoute(method: .post, path: "/v1/permissions/request") { request in
@@ -183,20 +183,19 @@ public enum CameraBridgeRoutes {
                 return .unauthorized()
             }
 
-            let semaphore = DispatchSemaphore(value: 0)
-            let resultBox = PermissionRequestResultBox()
-
-            controller.requestPermission { permissionResult in
-                resultBox.result = permissionResult
-                semaphore.signal()
+            let currentPermissionState = controller.currentPermissionState()
+            guard currentPermissionState != .notDetermined else {
+                return .error(
+                    statusCode: 409,
+                    code: "invalid_state",
+                    message: "Camera permission must be requested from CameraBridgeApp"
+                )
             }
-
-            semaphore.wait()
 
             return .json(
                 statusCode: 200,
                 body: PermissionRequestResponse(
-                    result: resultBox.result ?? .init(status: .denied, prompted: false)
+                    result: .init(status: currentPermissionState, prompted: false)
                 )
             )
         }
@@ -734,10 +733,6 @@ private struct PermissionRequestResponse: Encodable, Equatable {
         self.status = result.status.rawValue
         self.prompted = result.prompted
     }
-}
-
-private final class PermissionRequestResultBox: @unchecked Sendable {
-    var result: PermissionRequestResult?
 }
 
 private struct DevicesResponse: Encodable, Equatable {

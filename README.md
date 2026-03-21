@@ -74,8 +74,9 @@ The shortest successful path is:
 
 1. package and launch `CameraBridgeApp.app`
 2. click `Start Service`
-3. confirm `Permission: authorized`
-4. run the minimal Python example with a real device id from `GET /v1/devices`
+3. click `Request Camera Access` if permission is not already authorized
+4. confirm `Permission: authorized`
+5. run the minimal Python example with a real device id from `GET /v1/devices`
 
 ```bash
 python3 examples/python/capture_photo.py --device-id "YOUR_DEVICE_ID"

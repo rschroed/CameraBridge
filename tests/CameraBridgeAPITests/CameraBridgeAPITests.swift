@@ -144,8 +144,9 @@ func localHTTPServerReturnsPermissionStatusWithoutAuth() async throws {
 
 @Test
 func routerRejectsPermissionRequestWithoutBearerToken() {
-    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
-    let sessionController = makeSessionController(permissionRequester: requester)
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized)
+    )
     let router = makeRouter(sessionController: sessionController)
     let response = router.response(for: HTTPRequest(method: .post, path: "/v1/permissions/request"))
 
@@ -154,15 +155,35 @@ func routerRejectsPermissionRequestWithoutBearerToken() {
         String(decoding: response.body, as: UTF8.self) ==
         #"{"error":{"code":"unauthorized","message":"Bearer token missing or invalid"}}"#
     )
-    #expect(requester.requestCount == 0)
 }
 
 @Test
-func routerReturnsPermissionRequestResultForAuthorizedRequest() {
-    let requester = RecordingPermissionRequester(result: .init(status: .authorized, prompted: true))
+func routerRejectsPermissionRequestWhenPromptMustComeFromApp() {
     let sessionController = makeSessionController(
         state: CameraState(permissionState: .denied),
-        permissionRequester: requester
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined)
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/permissions/request",
+            headers: ["Authorization": "Bearer test-token"]
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Camera permission must be requested from CameraBridgeApp"}}"#
+    )
+    #expect(sessionController.currentCameraState().permissionState == .notDetermined)
+}
+
+@Test
+func routerReturnsStoredPermissionRequestResultForAuthorizedRequest() {
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized)
     )
     let router = makeRouter(sessionController: sessionController)
     let response = router.response(
@@ -174,16 +195,15 @@ func routerReturnsPermissionRequestResultForAuthorizedRequest() {
     )
 
     #expect(response.statusCode == 200)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":true,"status":"authorized"}"#)
-    #expect(requester.requestCount == 1)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"authorized"}"#)
     #expect(sessionController.currentCameraState().permissionState == .authorized)
 }
 
 @Test
-func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async throws {
+func localHTTPServerReturnsStoredPermissionRequestResultForAuthorizedRequest() async throws {
     let port = try reserveEphemeralPort()
     let sessionController = makeSessionController(
-        permissionRequester: FixedPermissionRequester(result: .init(status: .denied, prompted: true))
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .denied)
     )
     let server = LocalHTTPServer(
         configuration: .init(host: "127.0.0.1", port: port),
@@ -200,7 +220,7 @@ func localHTTPServerReturnsPermissionRequestResultForAuthorizedRequest() async t
     let httpResponse = try #require(response as? HTTPURLResponse)
 
     #expect(httpResponse.statusCode == 200)
-    #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":true,"status":"denied"}"#)
+    #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":false,"status":"denied"}"#)
     #expect(sessionController.currentCameraState().permissionState == .denied)
 }
 
@@ -871,7 +891,7 @@ private func makeRouter(
 ) -> CameraBridgeRouter {
     CameraBridgeRouter(
         routes: CameraBridgeRoutes.current(
-            permissionController: sessionController,
+            permissionStatusProvider: sessionController,
             deviceListing: sessionController,
             cameraStateProvider: sessionController,
             deviceSelector: sessionController,
@@ -922,20 +942,6 @@ private struct FixedPermissionRequester: CameraPermissionRequesting {
     let result: PermissionRequestResult
 
     func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
-        completion(result)
-    }
-}
-
-private final class RecordingPermissionRequester: CameraPermissionRequesting, @unchecked Sendable {
-    private(set) var requestCount = 0
-    let result: PermissionRequestResult
-
-    init(result: PermissionRequestResult) {
-        self.result = result
-    }
-
-    func requestPermission(completion: @escaping @Sendable (PermissionRequestResult) -> Void) {
-        requestCount += 1
         completion(result)
     }
 }
