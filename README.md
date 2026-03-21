@@ -34,6 +34,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 ## Docs
 
 - [Quick Start](docs/quick-start.md)
+- [Release Readiness](docs/release-readiness.md)
 - [Architecture Overview](docs/architecture-overview.md)
 - [v1 Roadmap](docs/roadmap/v1.md)
 - [API v1 Contract](docs/api/v1.md)
