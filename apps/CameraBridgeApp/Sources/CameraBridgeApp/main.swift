@@ -12,6 +12,7 @@ application.run()
 final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
     private let model = CameraBridgeAppModel()
     private var statusItem: NSStatusItem?
+    private var terminationRequested = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -30,9 +31,27 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
         model.stop()
     }
 
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard !terminationRequested else {
+            return .terminateNow
+        }
+
+        terminationRequested = true
+        Task { @MainActor in
+            await model.prepareForTermination()
+            sender.reply(toApplicationShouldTerminate: true)
+        }
+        return .terminateLater
+    }
+
     @objc
     private func startService(_ sender: Any?) {
         model.startService()
+    }
+
+    @objc
+    private func stopService(_ sender: Any?) {
+        model.stopService()
     }
 
     @objc
@@ -76,6 +95,15 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
         startServiceItem.isEnabled = model.canStartService
         menu.addItem(startServiceItem)
 
+        let stopServiceItem = NSMenuItem(
+            title: "Stop CameraBridge Service",
+            action: #selector(stopService(_:)),
+            keyEquivalent: ""
+        )
+        stopServiceItem.target = self
+        stopServiceItem.isEnabled = model.canStopService
+        menu.addItem(stopServiceItem)
+
         let requestPermissionItem = NSMenuItem(
             title: "Request Camera Access",
             action: #selector(requestCameraAccess(_:)),
@@ -84,6 +112,12 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
         requestPermissionItem.target = self
         requestPermissionItem.isEnabled = model.canRequestCameraAccess
         menu.addItem(requestPermissionItem)
+
+        menu.addItem(.separator())
+        menu.addItem(disabledItem(title: "Base URL: \(model.developerBaseURL)"))
+        menu.addItem(disabledItem(title: "Token: \(model.developerTokenPath)"))
+        menu.addItem(disabledItem(title: "Log: \(model.developerLogPath)"))
+        menu.addItem(disabledItem(title: "Captures: \(model.developerCapturesPath)"))
 
         menu.addItem(.separator())
 

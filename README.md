@@ -24,6 +24,44 @@ permission prompt. `camd` reads live AVFoundation permission status directly
 for `/v1/permissions`, `/v1/permissions/request`, and the session-start
 permission precondition.
 
+## Packaged Flow
+
+The packaged `CameraBridgeApp.app` bundle is the canonical pre-launch v1
+onboarding path.
+
+- `CameraBridgeApp` is the supported manager for the bundled `camd`
+- `Start CameraBridge Service` launches the bundled daemon if the configured
+  local endpoint is not already healthy
+- `Stop CameraBridge Service` stops only the daemon instance launched and
+  managed by the app
+- `Quit CameraBridge` stops the managed daemon before the app exits
+- if another healthy local CameraBridge service is already running, the app
+  shows `Running (External)` and does not kill that service
+- the app surfaces the current base URL plus the token, log, and captures paths
+  needed by local integrators
+
+The packaged flow reads runtime configuration from:
+
+```text
+~/Library/Application Support/CameraBridge/runtime-configuration.json
+```
+
+If no configuration file exists, CameraBridge defaults to:
+
+```json
+{
+  "host": "127.0.0.1",
+  "port": 8731
+}
+```
+
+At runtime, the app surfaces the effective base URL and the default support
+paths:
+
+- token: `~/Library/Application Support/CameraBridge/auth-token`
+- log: `~/Library/Application Support/CameraBridge/Logs/camd.log`
+- captures: `~/Library/Application Support/CameraBridge/Captures/`
+
 ## v1 Auth And Ownership
 
 CameraBridge v1 keeps the trust model intentionally narrow:
@@ -32,7 +70,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 - mutating endpoints use a bearer token or equivalent local secret
 - when `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at `~/Library/Application Support/CameraBridge/auth-token`
 - `CameraBridgeApp` performs permission prompting when access is still `not_determined`
-- `POST /v1/permissions/request` does not prompt from `camd`; it remains the token-protected programmatic permission-check route and returns current daemon-visible state or guidance to use `CameraBridgeApp`
+- `POST /v1/permissions/request` does not prompt from `camd`; it remains the token-protected programmatic permission-check route and always returns `200 OK` with current daemon-visible state plus guided next-step data when the app must request access
 - v1 does not add separate session `claim` or `release` endpoints
 - successful `POST /v1/session/start` establishes implicit session ownership
 - session ownership is released by `POST /v1/session/stop` or when the session ends
@@ -89,16 +127,27 @@ Follow the full setup and first-capture path in [docs/quick-start.md](docs/quick
 The shortest successful path is:
 
 1. package and launch `CameraBridgeApp.app`
-2. click `Start Service`
+2. click `Start CameraBridge Service`
 3. click `Request Camera Access` if permission is not already authorized
-4. confirm `Permission: authorized`
-5. run the minimal Python example with a real device id from `GET /v1/devices`
+4. confirm `Permission: Authorized`
+5. use the base URL and token path shown in the app if you are integrating from another local client
+6. run the minimal Python example with a real device id from `GET /v1/devices`
+
+The app shows the effective connection details in its menu. In the default
+packaged flow, those values are:
+
+```text
+Base URL: http://127.0.0.1:8731
+Token: ~/Library/Application Support/CameraBridge/auth-token
+Log: ~/Library/Application Support/CameraBridge/Logs/camd.log
+Captures: ~/Library/Application Support/CameraBridge/Captures/
+```
 
 ```bash
 python3 examples/python/capture_photo.py --device-id "YOUR_DEVICE_ID"
 ```
 
-The example reads the bearer token from:
+By default the example reads the bearer token from:
 
 ```text
 ~/Library/Application Support/CameraBridge/auth-token
@@ -109,6 +158,10 @@ and writes captures under:
 ```text
 ~/Library/Application Support/CameraBridge/Captures/
 ```
+
+If you stop the managed service from the app or quit the app, that managed
+daemon shuts down before exit. If the app detects an already-running external
+daemon, it leaves that process running.
 
 ## License
 

@@ -158,7 +158,7 @@ func routerRejectsPermissionRequestWithoutBearerToken() {
 }
 
 @Test
-func routerRejectsPermissionRequestWhenPromptMustComeFromApp() {
+func routerReturnsGuidedPermissionRequestResultWhenPromptMustComeFromApp() {
     let sessionController = makeSessionController(
         state: CameraState(permissionState: .denied),
         permissionStatusProvider: FixedPermissionStatusProvider(state: .notDetermined)
@@ -172,10 +172,10 @@ func routerRejectsPermissionRequestWhenPromptMustComeFromApp() {
         )
     )
 
-    #expect(response.statusCode == 409)
+    #expect(response.statusCode == 200)
     #expect(
         String(decoding: response.body, as: UTF8.self) ==
-        #"{"error":{"code":"invalid_state","message":"Camera permission must be requested from CameraBridgeApp"}}"#
+        #"{"message":"Open CameraBridgeApp to request camera access.","next_step":{"kind":"open_camera_bridge_app"},"prompted":false,"status":"not_determined"}"#
     )
     #expect(sessionController.currentCameraState().permissionState == .notDetermined)
 }
@@ -195,7 +195,10 @@ func routerReturnsStoredPermissionRequestResultForAuthorizedRequest() {
     )
 
     #expect(response.statusCode == 200)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"authorized"}"#)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"message":null,"next_step":null,"prompted":false,"status":"authorized"}"#
+    )
     #expect(sessionController.currentCameraState().permissionState == .authorized)
 }
 
@@ -214,7 +217,10 @@ func routerReturnsStoredPermissionRequestResultForRestrictedRequest() {
     )
 
     #expect(response.statusCode == 200)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"restricted"}"#)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"message":null,"next_step":null,"prompted":false,"status":"restricted"}"#
+    )
     #expect(sessionController.currentCameraState().permissionState == .restricted)
 }
 
@@ -233,7 +239,10 @@ func routerReturnsStoredPermissionRequestResultForDeniedRequest() {
     )
 
     #expect(response.statusCode == 200)
-    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"denied"}"#)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"message":null,"next_step":null,"prompted":false,"status":"denied"}"#
+    )
     #expect(sessionController.currentCameraState().permissionState == .denied)
 }
 
@@ -258,7 +267,10 @@ func localHTTPServerReturnsStoredPermissionRequestResultForAuthorizedRequest() a
     let httpResponse = try #require(response as? HTTPURLResponse)
 
     #expect(httpResponse.statusCode == 200)
-    #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":false,"status":"denied"}"#)
+    #expect(
+        String(decoding: data, as: UTF8.self) ==
+        #"{"message":null,"next_step":null,"prompted":false,"status":"denied"}"#
+    )
     #expect(sessionController.currentCameraState().permissionState == .denied)
 }
 

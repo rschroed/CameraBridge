@@ -8,7 +8,9 @@ final class CameraBridgeAppModel {
     enum ServiceStatus: Equatable {
         case stopped
         case starting
-        case running
+        case runningManaged
+        case runningExternal
+        case stopping
         case failed(String)
 
         var title: String {
@@ -17,15 +19,19 @@ final class CameraBridgeAppModel {
                 return "Stopped"
             case .starting:
                 return "Starting"
-            case .running:
+            case .runningManaged:
                 return "Running"
+            case .runningExternal:
+                return "Running (External)"
+            case .stopping:
+                return "Stopping"
             case .failed:
                 return "Needs Attention"
             }
         }
 
-        var isRunning: Bool {
-            if case .running = self {
+        var isManagedRunning: Bool {
+            if case .runningManaged = self {
                 return true
             }
 
@@ -72,6 +78,13 @@ final class CameraBridgeAppModel {
         }
     }
 
+    private struct DeveloperInfo: Equatable {
+        var baseURL: String
+        var tokenPath: String
+        var logPath: String
+        var capturesPath: String
+    }
+
     var onChange: (() -> Void)?
 
     var serviceStatusTitle: String {
@@ -86,20 +99,27 @@ final class CameraBridgeAppModel {
         switch (serviceStatus, permissionDisplay) {
         case (.starting, _):
             return "CameraBridge is starting"
+        case (.stopping, _):
+            return "CameraBridge is stopping"
         case (.stopped, _):
             return "Local service is stopped"
         case (.failed, _):
             return "CameraBridge needs attention"
-        case (.running, .checking):
+        case (.runningManaged, .checking), (.runningExternal, .checking):
             return "Waiting for camera access"
-        case (.running, .notDetermined):
+        case (.runningManaged, .notDetermined), (.runningExternal, .notDetermined):
             return "Camera access setup is incomplete"
-        case (.running, .restricted), (.running, .denied):
+        case (.runningManaged, .restricted), (.runningManaged, .denied),
+            (.runningExternal, .restricted), (.runningExternal, .denied):
             return "Camera access is unavailable"
-        case (.running, .authorized):
+        case (.runningManaged, .authorized):
             return "CameraBridge is ready"
-        case (.running, .unavailable):
-            return "Service is running"
+        case (.runningExternal, .authorized):
+            return "External CameraBridge service detected"
+        case (.runningManaged, .unavailable):
+            return "Managed service is running"
+        case (.runningExternal, .unavailable):
+            return "External CameraBridge service detected"
         }
     }
 
@@ -107,6 +127,8 @@ final class CameraBridgeAppModel {
         switch (serviceStatus, permissionDisplay) {
         case (.starting, _):
             return "Waiting for the local CameraBridge service to respond."
+        case (.stopping, _):
+            return "Waiting for the managed CameraBridge service to stop."
         case (.stopped, .notDetermined), (.failed, .notDetermined):
             return "Request camera access from CameraBridge, then start the local service to finish onboarding."
         case (.stopped, .restricted), (.failed, .restricted):
@@ -115,18 +137,24 @@ final class CameraBridgeAppModel {
             return "Camera access was denied. Re-enable it in System Settings > Privacy & Security > Camera."
         case (.stopped, _), (.failed, _):
             return "Start the local service to finish onboarding."
-        case (.running, .checking):
+        case (.runningManaged, .checking), (.runningExternal, .checking):
             return "Respond to the macOS camera permission prompt if it appears."
-        case (.running, .notDetermined):
+        case (.runningManaged, .notDetermined):
             return "Request camera access from CameraBridge to continue."
-        case (.running, .restricted):
+        case (.runningExternal, .notDetermined):
+            return "A local CameraBridge service is already running. Request camera access from CameraBridge to continue."
+        case (.runningManaged, .restricted), (.runningExternal, .restricted):
             return "Camera access is restricted on this Mac and cannot be granted from CameraBridge."
-        case (.running, .denied):
+        case (.runningManaged, .denied), (.runningExternal, .denied):
             return "Camera access was denied. Re-enable it in System Settings > Privacy & Security > Camera."
-        case (.running, .authorized):
-            return "The service is running and camera access is available."
-        case (.running, .unavailable):
-            return "The service is running, but permission status could not be loaded."
+        case (.runningManaged, .authorized):
+            return "The managed CameraBridge service is running and camera access is available."
+        case (.runningExternal, .authorized):
+            return "A local CameraBridge service is already running outside this app and camera access is available."
+        case (.runningManaged, .unavailable):
+            return "The managed service is running, but permission status could not be loaded."
+        case (.runningExternal, .unavailable):
+            return "A local CameraBridge service is already running, but permission status could not be loaded."
         }
     }
 
@@ -136,15 +164,35 @@ final class CameraBridgeAppModel {
 
     var canStartService: Bool {
         switch serviceStatus {
-        case .running, .starting:
+        case .runningManaged, .runningExternal, .starting, .stopping:
             return false
         case .stopped, .failed:
             return true
         }
     }
 
+    var canStopService: Bool {
+        serviceStatus.isManagedRunning
+    }
+
     var canRequestCameraAccess: Bool {
         !isRequestInFlight && (permissionDisplay == .notDetermined || permissionDisplay == .unavailable)
+    }
+
+    var developerBaseURL: String {
+        developerInfo.baseURL
+    }
+
+    var developerTokenPath: String {
+        developerInfo.tokenPath
+    }
+
+    var developerLogPath: String {
+        developerInfo.logPath
+    }
+
+    var developerCapturesPath: String {
+        developerInfo.capturesPath
     }
 
     private var serviceStatus: ServiceStatus = .stopped
@@ -152,25 +200,43 @@ final class CameraBridgeAppModel {
     private var lastError: String?
     private var isRequestInFlight = false
     private var refreshTimer: Timer?
+    private var developerInfo = DeveloperInfo(
+        baseURL: "Unavailable",
+        tokenPath: "Unavailable",
+        logPath: "Unavailable",
+        capturesPath: "Unavailable"
+    )
 
     private let client: any CameraBridgeAppClient
     private let permissionController: any CameraBridgeAppPermissionControlling
-    private let serviceLauncher: any CameraBridgeServiceLaunching
+    private let serviceController: any CameraBridgeServiceControlling
+    private let runtimeConfigurationStore: any CameraBridgeRuntimeConfigurationReading
+    private let runtimeInfoStore: any CameraBridgeRuntimeInfoReading
 
     init(
         client: (any CameraBridgeAppClient)? = nil,
         authTokenStore: any CameraBridgeAuthTokenReading = DefaultCameraBridgeAuthTokenStore(),
+        runtimeConfigurationStore: any CameraBridgeRuntimeConfigurationReading = DefaultCameraBridgeRuntimeConfigurationStore(),
+        runtimeInfoStore: any CameraBridgeRuntimeInfoReading = DefaultCameraBridgeRuntimeInfoStore(),
         permissionController: (any CameraBridgeAppPermissionControlling)? = nil,
-        serviceLauncher: (any CameraBridgeServiceLaunching)? = nil
+        serviceController: (any CameraBridgeServiceControlling)? = nil
     ) {
+        let runtimeConfiguration = (try? runtimeConfigurationStore.loadConfiguration()) ??
+            CameraBridgeRuntimeConfiguration()
         let resolvedClient = client ?? CameraBridgeClient(
+            baseURL: runtimeConfiguration.baseURL,
             tokenProvider: {
                 try? authTokenStore.loadToken()
             }
         )
         self.client = resolvedClient
+        self.runtimeConfigurationStore = runtimeConfigurationStore
+        self.runtimeInfoStore = runtimeInfoStore
         self.permissionController = permissionController ?? AVFoundationCameraBridgeAppPermissionController()
-        self.serviceLauncher = serviceLauncher ?? LocalCameraBridgeServiceLauncher(client: resolvedClient)
+        self.serviceController = serviceController ?? LocalCameraBridgeServiceController(
+            client: resolvedClient,
+            runtimeConfigurationStore: runtimeConfigurationStore
+        )
     }
 
     func start() {
@@ -199,6 +265,12 @@ final class CameraBridgeAppModel {
         }
     }
 
+    func stopService() {
+        Task { @MainActor in
+            await stopServiceNow()
+        }
+    }
+
     func requestCameraAccess() {
         Task { @MainActor in
             await requestCameraAccessNow()
@@ -213,8 +285,16 @@ final class CameraBridgeAppModel {
         await performStartService()
     }
 
+    func stopServiceNow() async {
+        await performStopService()
+    }
+
     func requestCameraAccessNow() async {
         await performRequestCameraAccess()
+    }
+
+    func prepareForTermination() async {
+        try? await serviceController.stopIfManaged()
     }
 
     private func publishChange() {
@@ -223,9 +303,16 @@ final class CameraBridgeAppModel {
 
     private func refreshState() async {
         let permissionStatus = permissionController.currentPermissionStatus()
-        let isRunning = await client.serviceIsRunning()
-        serviceStatus = isRunning ? .running : .stopped
+        switch await serviceController.currentManagementState() {
+        case .stopped:
+            serviceStatus = .stopped
+        case .runningManaged:
+            serviceStatus = .runningManaged
+        case .runningExternal:
+            serviceStatus = .runningExternal
+        }
         permissionDisplay = .init(permissionStatus: permissionStatus)
+        developerInfo = loadDeveloperInfo()
         lastError = nil
         publishChange()
     }
@@ -240,12 +327,35 @@ final class CameraBridgeAppModel {
         publishChange()
 
         do {
-            try await serviceLauncher.startIfNeeded()
+            try await serviceController.startIfNeeded()
             await refreshState()
         } catch {
             serviceStatus = .failed(displayMessage(for: error))
             let permissionStatus = permissionController.currentPermissionStatus()
             permissionDisplay = .init(permissionStatus: permissionStatus)
+            developerInfo = loadDeveloperInfo()
+            lastError = displayMessage(for: error)
+            publishChange()
+        }
+    }
+
+    private func performStopService() async {
+        guard canStopService else {
+            return
+        }
+
+        serviceStatus = .stopping
+        lastError = nil
+        publishChange()
+
+        do {
+            try await serviceController.stopIfManaged()
+            await refreshState()
+        } catch {
+            serviceStatus = .failed(displayMessage(for: error))
+            let permissionStatus = permissionController.currentPermissionStatus()
+            permissionDisplay = .init(permissionStatus: permissionStatus)
+            developerInfo = loadDeveloperInfo()
             lastError = displayMessage(for: error)
             publishChange()
         }
@@ -270,6 +380,32 @@ final class CameraBridgeAppModel {
         await refreshState()
     }
 
+    private func loadDeveloperInfo() -> DeveloperInfo {
+        let runtimeConfiguration = (try? runtimeConfigurationStore.loadConfiguration()) ??
+            CameraBridgeRuntimeConfiguration()
+        let runtimeInfo = try? runtimeInfoStore.loadRuntimeInfo()
+
+        return DeveloperInfo(
+            baseURL: (runtimeInfo?.baseURL ?? runtimeConfiguration.baseURL).absoluteString,
+            tokenPath: pathDescription(
+                runtimeInfo?.tokenFileURL,
+                fallback: try? CameraBridgeSupportPaths.authTokenURL()
+            ),
+            logPath: pathDescription(
+                runtimeInfo?.logFileURL,
+                fallback: try? CameraBridgeSupportPaths.logFileURL()
+            ),
+            capturesPath: pathDescription(
+                runtimeInfo?.capturesDirectoryURL,
+                fallback: try? CameraBridgeSupportPaths.capturesDirectoryURL()
+            )
+        )
+    }
+
+    private func pathDescription(_ value: URL?, fallback: URL?) -> String {
+        (value ?? fallback)?.path ?? "Unavailable"
+    }
+
     private func displayMessage(for error: Error) -> String {
         switch error {
         case let clientError as CameraBridgeClientError:
@@ -281,8 +417,8 @@ final class CameraBridgeAppModel {
             case .requestFailed(_, _, let message):
                 return message ?? "Service request failed"
             }
-        case let launchError as CameraBridgeServiceLaunchError:
-            return launchError.errorDescription ?? "Service failed to start"
+        case let controlError as CameraBridgeServiceControlError:
+            return controlError.errorDescription ?? "Service control failed"
         case let authTokenError as CameraBridgeAuthTokenError:
             return authTokenError.errorDescription ?? "Auth token setup failed"
         default:
@@ -296,6 +432,18 @@ protocol CameraBridgeAuthTokenReading {
 }
 
 extension DefaultCameraBridgeAuthTokenStore: CameraBridgeAuthTokenReading {}
+
+protocol CameraBridgeRuntimeConfigurationReading {
+    func loadConfiguration() throws -> CameraBridgeRuntimeConfiguration
+}
+
+extension DefaultCameraBridgeRuntimeConfigurationStore: CameraBridgeRuntimeConfigurationReading {}
+
+protocol CameraBridgeRuntimeInfoReading {
+    func loadRuntimeInfo() throws -> CameraBridgeRuntimeInfo?
+}
+
+extension DefaultCameraBridgeRuntimeInfoStore: CameraBridgeRuntimeInfoReading {}
 
 protocol CameraBridgeAppClient {
     func serviceIsRunning() async -> Bool
@@ -340,14 +488,23 @@ struct AVFoundationCameraBridgeAppPermissionController: CameraBridgeAppPermissio
     }
 }
 
-@MainActor
-protocol CameraBridgeServiceLaunching {
-    func startIfNeeded() async throws
+enum CameraBridgeManagedServiceState: Equatable {
+    case stopped
+    case runningManaged
+    case runningExternal
 }
 
-enum CameraBridgeServiceLaunchError: LocalizedError {
+@MainActor
+protocol CameraBridgeServiceControlling {
+    func startIfNeeded() async throws
+    func stopIfManaged() async throws
+    func currentManagementState() async -> CameraBridgeManagedServiceState
+}
+
+enum CameraBridgeServiceControlError: LocalizedError {
     case missingBundledDaemon
     case failedToStartService
+    case failedToStopService
     case launchLogUnavailable
 
     var errorDescription: String? {
@@ -356,6 +513,8 @@ enum CameraBridgeServiceLaunchError: LocalizedError {
             return "Bundled camd executable is missing"
         case .failedToStartService:
             return "Service did not become healthy after launch"
+        case .failedToStopService:
+            return "Managed service did not stop cleanly"
         case .launchLogUnavailable:
             return "Service log file could not be opened"
         }
@@ -363,12 +522,18 @@ enum CameraBridgeServiceLaunchError: LocalizedError {
 }
 
 @MainActor
-final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
+final class LocalCameraBridgeServiceController: CameraBridgeServiceControlling {
     private let client: any CameraBridgeAppClient
+    private let runtimeConfigurationStore: any CameraBridgeRuntimeConfigurationReading
     private var process: Process?
+    private var logHandle: FileHandle?
 
-    init(client: any CameraBridgeAppClient) {
+    init(
+        client: any CameraBridgeAppClient,
+        runtimeConfigurationStore: any CameraBridgeRuntimeConfigurationReading
+    ) {
         self.client = client
+        self.runtimeConfigurationStore = runtimeConfigurationStore
     }
 
     func startIfNeeded() async throws {
@@ -378,14 +543,24 @@ final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
 
         let daemonURL = try bundledDaemonURL()
         let logHandle = try makeLogHandle()
+        let runtimeConfiguration = (try? runtimeConfigurationStore.loadConfiguration()) ??
+            CameraBridgeRuntimeConfiguration()
 
         let process = Process()
         process.executableURL = daemonURL
         process.standardOutput = logHandle
         process.standardError = logHandle
+        process.environment = mergedEnvironment(runtimeConfiguration: runtimeConfiguration)
 
-        try process.run()
+        do {
+            try process.run()
+        } catch {
+            try? logHandle.close()
+            throw error
+        }
+
         self.process = process
+        self.logHandle = logHandle
 
         for _ in 0..<20 {
             if await client.serviceIsRunning() {
@@ -399,17 +574,64 @@ final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
             try await Task.sleep(nanoseconds: 250_000_000)
         }
 
-        throw CameraBridgeServiceLaunchError.failedToStartService
+        clearManagedProcess()
+        throw CameraBridgeServiceControlError.failedToStartService
+    }
+
+    func stopIfManaged() async throws {
+        guard let process, process.isRunning else {
+            clearManagedProcess()
+            return
+        }
+
+        process.terminate()
+
+        for _ in 0..<20 {
+            if !process.isRunning {
+                break
+            }
+
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        if process.isRunning {
+            clearManagedProcess()
+            throw CameraBridgeServiceControlError.failedToStopService
+        }
+
+        for _ in 0..<20 {
+            if !(await client.serviceIsRunning()) {
+                clearManagedProcess()
+                return
+            }
+
+            try await Task.sleep(nanoseconds: 250_000_000)
+        }
+
+        clearManagedProcess()
+        throw CameraBridgeServiceControlError.failedToStopService
+    }
+
+    func currentManagementState() async -> CameraBridgeManagedServiceState {
+        if let process, process.isRunning, await client.serviceIsRunning() {
+            return .runningManaged
+        }
+
+        if await client.serviceIsRunning() {
+            return .runningExternal
+        }
+
+        return .stopped
     }
 
     private func bundledDaemonURL() throws -> URL {
         guard let resourceURL = Bundle.main.resourceURL else {
-            throw CameraBridgeServiceLaunchError.missingBundledDaemon
+            throw CameraBridgeServiceControlError.missingBundledDaemon
         }
 
         let daemonURL = resourceURL.appendingPathComponent("camd", isDirectory: false)
         guard FileManager.default.isExecutableFile(atPath: daemonURL.path) else {
-            throw CameraBridgeServiceLaunchError.missingBundledDaemon
+            throw CameraBridgeServiceControlError.missingBundledDaemon
         }
 
         return daemonURL
@@ -417,27 +639,33 @@ final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
 
     private func makeLogHandle() throws -> FileHandle {
         let fileManager = FileManager.default
-        guard let applicationSupportURL =
-            fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        else {
-            throw CameraBridgeServiceLaunchError.launchLogUnavailable
-        }
-
-        let logsURL = applicationSupportURL
-            .appendingPathComponent("CameraBridge", isDirectory: true)
-            .appendingPathComponent("Logs", isDirectory: true)
+        let logsURL = try CameraBridgeSupportPaths.logsDirectoryURL(fileManager: fileManager)
         try fileManager.createDirectory(at: logsURL, withIntermediateDirectories: true)
 
-        let logURL = logsURL.appendingPathComponent("camd.log", isDirectory: false)
+        let logURL = try CameraBridgeSupportPaths.logFileURL(fileManager: fileManager)
         if !fileManager.fileExists(atPath: logURL.path) {
             guard fileManager.createFile(atPath: logURL.path, contents: nil) else {
-                throw CameraBridgeServiceLaunchError.launchLogUnavailable
+                throw CameraBridgeServiceControlError.launchLogUnavailable
             }
         }
 
         let handle = try FileHandle(forWritingTo: logURL)
         try handle.seekToEnd()
         return handle
+    }
+
+    private func mergedEnvironment(runtimeConfiguration: CameraBridgeRuntimeConfiguration) -> [String: String] {
+        var environment = ProcessInfo.processInfo.environment
+        environment["CAMERABRIDGE_HOST"] = runtimeConfiguration.host
+        environment["CAMERABRIDGE_PORT"] = String(runtimeConfiguration.port)
+        environment["CAMERABRIDGE_RUNTIME_OWNERSHIP"] = CameraBridgeRuntimeOwnership.appManaged.rawValue
+        return environment
+    }
+
+    private func clearManagedProcess() {
+        process = nil
+        try? logHandle?.close()
+        logHandle = nil
     }
 }
 

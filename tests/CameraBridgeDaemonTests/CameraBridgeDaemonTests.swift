@@ -74,6 +74,43 @@ func daemonNonPromptingPermissionRequesterIgnoresStalePermissionStateFiles() thr
     #expect(try String(contentsOf: staleFileURL, encoding: .utf8) == "authorized")
 }
 
+@Test
+func serverConfigurationUsesStoredRuntimeConfigurationWhenHostAndPortAreNotProvided() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let runtimeConfigurationStore = DefaultCameraBridgeRuntimeConfigurationStore(baseDirectoryURL: directoryURL)
+    try runtimeConfigurationStore.saveConfiguration(.init(host: "127.0.0.1", port: 9101))
+
+    let configuration = ServerConfiguration(runtimeConfigurationStore: runtimeConfigurationStore)
+
+    #expect(configuration.host == "127.0.0.1")
+    #expect(configuration.port == 9101)
+}
+
+@Test
+func daemonRuntimeInfoUsesRuntimeOwnershipAndStablePaths() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let authTokenStore = DefaultCameraBridgeAuthTokenStore(baseDirectoryURL: directoryURL)
+    let token = try authTokenStore.loadOrCreateToken()
+    #expect(!token.isEmpty)
+
+    let daemon = CameraBridgeDaemon(configuration: .init(host: "127.0.0.1", port: 9102))
+    let runtimeInfo = try daemon.runtimeInfo(
+        boundPort: 9102,
+        authTokenStore: authTokenStore
+    )
+
+    #expect(runtimeInfo.host == "127.0.0.1")
+    #expect(runtimeInfo.port == 9102)
+    #expect(runtimeInfo.tokenFileURL.path.hasSuffix("auth-token"))
+    #expect(runtimeInfo.logFileURL.path.hasSuffix("Logs/camd.log"))
+    #expect(runtimeInfo.capturesDirectoryURL.path.hasSuffix("Captures"))
+    #expect(runtimeInfo.ownership == .external)
+}
+
 private func makeTemporaryDirectoryURL() -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)

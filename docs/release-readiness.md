@@ -15,9 +15,9 @@ It is intentionally manual. CI should continue to avoid hardware dependencies.
 
 ### Goal
 
-Validate the packaged app, daemon bootstrap, local token path, permission flow,
-device selection, still capture, and capture artifact path in one repeatable
-manual run.
+Validate the packaged app, app-supervised daemon lifecycle, local token path,
+permission flow, developer-info surfacing, device selection, still capture, and
+capture artifact path in one repeatable manual run.
 
 ### Prerequisites
 
@@ -52,14 +52,17 @@ Expected checkpoints:
 - the menu bar app appears
 - the initial state reports the service as stopped
 - `Start CameraBridge Service` is available
+- developer info rows are visible even before capture
 
 3. Start the service from the menu bar app.
 
 Expected checkpoints:
 
 - the menu updates to `Service: Running`
+- `Stop CameraBridge Service` becomes available
 - `camd` binds to `127.0.0.1:8731`
 - `~/Library/Application Support/CameraBridge/auth-token` exists
+- the menu surfaces the effective base URL, token path, log path, and captures path
 
 4. Request camera access from the menu bar app if permission is not already
    authorized.
@@ -69,6 +72,10 @@ Expected checkpoints:
 - the macOS permission prompt appears from `CameraBridgeApp` when status is `not_determined`
 - the menu reaches `Permission: Authorized`
 - failures are surfaced in the menu with readable text
+
+If the machine is in a fresh `not_determined` state before permission is
+granted, `POST /v1/permissions/request` should return `200 OK` with a guided
+`next_step.kind` of `open_camera_bridge_app` rather than `409 invalid_state`.
 
 5. Verify the local API:
 
@@ -87,7 +94,7 @@ Expected checkpoints:
 
 - `/health` returns `{"status":"ok"}`
 - `/v1/permissions` returns `authorized`
-- `/v1/permissions/request` returns `{"prompted":false,"status":"authorized"}`
+- `/v1/permissions/request` returns `{"message":null,"next_step":null,"prompted":false,"status":"authorized"}`
 - `/v1/devices` returns at least one real camera device
 
 5a. Verify stale file non-involvement:
@@ -128,6 +135,8 @@ Expected checkpoints:
 - `GET /v1/session` reports `state: stopped`
 - the selected `active_device_id` is preserved for later restart
 - the app remains responsive after capture
+- stopping the service from the app returns the menu to the stopped state
+- quitting the app after a managed start leaves no healthy managed daemon behind
 
 ## Failure Surfaces To Record
 
@@ -139,6 +148,7 @@ Record any failure in these areas:
 - permission prompt does not appear when expected
 - permission state does not update after the prompt
 - daemon permission routes do not reflect live OS permission state
+- permission request route returns an error instead of guided `200 OK` data for undecided permission
 - device listing is empty despite connected hardware
 - session start or device selection fails unexpectedly
 - capture fails or no artifact is written
@@ -156,14 +166,17 @@ release:
 - [ ] Packaged `CameraBridgeApp.app` launched successfully
 - [ ] `camd` started from the app and reported healthy on `127.0.0.1:8731`
 - [ ] Auth token file existed at `~/Library/Application Support/CameraBridge/auth-token`
+- [ ] App surfaced base URL, token path, log path, and captures path
 - [ ] Camera permission reached `authorized`
 - [ ] `GET /v1/permissions` reflected live OS permission state
-- [ ] `POST /v1/permissions/request` returned `prompted:false` after authorization
+- [ ] `POST /v1/permissions/request` returned `message:null`, `next_step:null`, and `prompted:false` after authorization
 - [ ] Stale `permission-state` file had no effect on daemon permission responses
 - [ ] `GET /v1/devices` returned the expected camera
 - [ ] Python first-capture example completed successfully
 - [ ] Capture artifact existed at the reported `local_path`
 - [ ] `GET /v1/session` returned `stopped` after cleanup
+- [ ] `Stop CameraBridge Service` returned the app to the stopped state
+- [ ] Quitting the app stopped the managed daemon
 - [ ] Any issues or follow-up fixes were recorded before release
 
 ## Result Template
@@ -183,7 +196,7 @@ Fill this in during the manual run:
 - Machine: Mac17,3
 - macOS version: 26.3.1 (25D2128)
 - Camera device: Insta360 Link 2
-- Result: Passed
+- Result: Passed (pre-contract-cleanup run)
 - Notes:
   - `GET /health` returned `200 OK`
   - `GET /v1/permissions` returned `authorized`
@@ -191,3 +204,4 @@ Fill this in during the manual run:
   - A stale `~/Library/Application Support/CameraBridge/permission-state` file did not affect daemon permission responses
   - `examples/python/capture_photo.py --device-id 0x1000002e1a4c04` completed successfully
   - Capture artifact written to `~/Library/Application Support/CameraBridge/Captures/capture-20260321T194247439Z-e21df7e5-ca86-4529-982f-a4a511053f7e.jpg`
+  - This run predates the guided permission-response and app-supervised lifecycle cleanup and should be repeated before release

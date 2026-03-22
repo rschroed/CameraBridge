@@ -4,7 +4,7 @@ This guide walks through the current working v1 loop on macOS:
 
 1. build the repo
 2. package and launch `CameraBridgeApp`
-3. start the local service and confirm camera permission
+3. start the local service, confirm camera permission, and read the surfaced connection details
 4. run one minimal example client that selects a device, starts a session, captures a still image, and stops the session
 
 ## Prerequisites
@@ -46,35 +46,45 @@ $(swift build --show-bin-path)/CameraBridgeApp.app
 
 From the menu bar app:
 
-1. click `Start Service`
-2. confirm the app shows `Service: running`
+1. click `Start CameraBridge Service`
+2. confirm the app shows `Service: Running`
 3. click `Request Camera Access` if permission is still undecided
 4. allow the macOS camera prompt shown by `CameraBridgeApp`
-5. confirm the app shows `Permission: authorized`
+5. confirm the app shows `Permission: Authorized`
+6. note the `Base URL`, `Token`, `Log`, and `Captures` rows shown in the menu
 
-When `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at:
+The packaged app supervises the bundled daemon in the supported v1 flow:
+
+- `Start CameraBridge Service` launches the bundled `camd` if the configured endpoint is not already healthy
+- `Stop CameraBridge Service` stops only the daemon instance launched by the app
+- `Quit CameraBridge` stops that managed daemon before exit
+- if the app detects an already-running daemon that it did not launch, it shows `Running (External)` and leaves that process alone
+
+The app surfaces the effective connection details in its menu. In the default packaged flow they are:
 
 ```text
-~/Library/Application Support/CameraBridge/auth-token
+Base URL: http://127.0.0.1:8731
+Token: ~/Library/Application Support/CameraBridge/auth-token
+Log: ~/Library/Application Support/CameraBridge/Logs/camd.log
+Captures: ~/Library/Application Support/CameraBridge/Captures/
 ```
 
-The packaged app uses that same daemon-owned token contract when it launches the bundled service.
+The packaged flow reads runtime configuration from:
+
+```text
+~/Library/Application Support/CameraBridge/runtime-configuration.json
+```
+
+If no configuration file exists, CameraBridge defaults to `127.0.0.1:8731`.
 
 The daemon reads live AVFoundation permission status directly for
 `/v1/permissions`, `/v1/permissions/request`, and the session-start permission
 precondition.
 
-The packaged app starts `camd` as a localhost-only service intended to be reachable from other local clients at `127.0.0.1:8731`.
-
-Camera captures are stored under:
-
-```text
-~/Library/Application Support/CameraBridge/Captures/
-```
-
 ## Verify The Local API
 
-Check the service health and current permission state:
+Use the base URL and token path surfaced by the app. With the default packaged
+flow, check the service health and current permission state with:
 
 ```bash
 curl -s http://127.0.0.1:8731/health
@@ -86,13 +96,24 @@ curl -s -X POST http://127.0.0.1:8731/v1/permissions/request \
 curl -s http://127.0.0.1:8731/v1/devices
 ```
 
-If permission is already decided, `POST /v1/permissions/request` returns the
-current daemon-visible status with `prompted: false`. The route remains in the
-API so local clients have a stable token-protected way to check whether
-permission is now usable. If it returns `409 invalid_state`, go back to the
-menu bar app and request access there.
+`POST /v1/permissions/request` now returns `200 OK` for every permission state.
+When permission is already decided, the response keeps `prompted: false` and
+returns `message: null` and `next_step: null`. When permission is still
+`not_determined`, the route returns guided next-step data instead of `409`:
 
-The mutating endpoints use the bearer token from Application Support:
+```json
+{
+  "message": "Open CameraBridgeApp to request camera access.",
+  "next_step": {
+    "kind": "open_camera_bridge_app"
+  },
+  "prompted": false,
+  "status": "not_determined"
+}
+```
+
+The mutating endpoints use the bearer token shown in the app. In the default
+packaged flow:
 
 ```bash
 TOKEN="$(cat ~/Library/Application\ Support/CameraBridge/auth-token)"
