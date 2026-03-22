@@ -109,3 +109,7 @@ and writes captures under:
 ```text
 ~/Library/Application Support/CameraBridge/Captures/
 ```
+
+## License
+
+CameraBridge is licensed under the MIT License. See [LICENSE](LICENSE).
