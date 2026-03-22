@@ -69,6 +69,7 @@ if [[ "$SIGNING_MODE" != "adhoc" && "$SIGNING_MODE" != "developer-id" ]]; then
 fi
 
 ARTIFACT_PREFIX="CameraBridgeApp-${VERSION}-macos"
+BUNDLE_VERSION="$(printf '%s' "$VERSION" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)([-.].*)?$/\1/')"
 STAGE_DIR="$OUTPUT_DIR/stage"
 APP_PATH="$STAGE_DIR/CameraBridgeApp.app"
 NOTARIZATION_ZIP="$OUTPUT_DIR/${ARTIFACT_PREFIX}-notarization.zip"
@@ -81,7 +82,8 @@ rm -f "$NOTARIZATION_ZIP" "$RELEASE_ZIP" "$CHECKSUM_FILE"
 "$PACKAGE_SCRIPT" \
     --build-configuration release \
     --output-dir "$STAGE_DIR" \
-    --signing-mode "$SIGNING_MODE"
+    --signing-mode "$SIGNING_MODE" \
+    --bundle-version "$BUNDLE_VERSION"
 
 if [[ "$SIGNING_MODE" == "developer-id" && "$SKIP_NOTARIZATION" != "1" ]]; then
     : "${CAMERABRIDGE_NOTARY_KEY_ID:?CAMERABRIDGE_NOTARY_KEY_ID is required for notarization}"
@@ -100,7 +102,8 @@ if [[ "$SIGNING_MODE" == "developer-id" && "$SKIP_NOTARIZATION" != "1" ]]; then
         --wait
 
     xcrun stapler staple "$APP_PATH"
-    spctl -a -vv --type exec "$APP_PATH"
+    xcrun stapler validate "$APP_PATH"
+    spctl -a -vv --type open "$APP_PATH"
 fi
 
 ditto -c -k --keepParent "$APP_PATH" "$RELEASE_ZIP"
@@ -109,5 +112,6 @@ shasum -a 256 "$RELEASE_ZIP" > "$CHECKSUM_FILE"
 codesign --verify --strict --verbose=2 "$APP_PATH"
 
 echo "Release app: $APP_PATH"
+echo "Bundle version: $BUNDLE_VERSION"
 echo "Release zip: $RELEASE_ZIP"
 echo "Checksum: $CHECKSUM_FILE"

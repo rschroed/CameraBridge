@@ -21,8 +21,13 @@ Expected checks:
 - download the published maintainer-produced
   `CameraBridgeApp-v0.x.y-macos.zip` asset from GitHub Releases
 - verify the published checksum matches the downloaded zip
+- maintainer-side `xcrun notarytool submit --wait` completed successfully
+- maintainer-side `xcrun stapler validate` completed successfully
+- maintainer-side `spctl --assess --type open` accepted the stapled app bundle
 - install the downloaded app bundle into `/Applications`
 - confirm Gatekeeper accepts launch of the notarized app
+- confirm the installed app bundle reports the tag core version in
+  `CFBundleShortVersionString` and `CFBundleVersion`
 - confirm the installed app can complete the packaged-flow smoke test
 
 ## First-Capture Smoke Test
@@ -179,8 +184,12 @@ release:
 - [ ] `swift test` passed
 - [ ] Published GitHub Release zip downloaded successfully
 - [ ] Published checksum matched the downloaded zip
+- [ ] Maintainer run completed `xcrun notarytool submit --wait`
+- [ ] Maintainer run completed `xcrun stapler validate`
+- [ ] Maintainer run passed `spctl --assess --type open`
 - [ ] Installed app bundle launched successfully from `/Applications`
 - [ ] Gatekeeper accepted the notarized app
+- [ ] Installed app bundle metadata matched the release tag core version
 - [ ] Packaged `CameraBridgeApp.app` launched successfully
 - [ ] `camd` started from the app and reported healthy on `127.0.0.1:8731`
 - [ ] Auth token file existed at `~/Library/Application Support/CameraBridge/auth-token`
