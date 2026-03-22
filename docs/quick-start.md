@@ -1,5 +1,10 @@
 # CameraBridge Quick Start
 
+If you are adopting CameraBridge as an external dependency, start with the
+[Install Guide](./install.md) and [Compatibility](./compatibility.md). This
+quick start remains the repo-local source-build path for contributors and local
+verification.
+
 This guide walks through the current working v1 loop on macOS:
 
 1. build the repo
@@ -175,6 +180,8 @@ curl -s -X POST http://127.0.0.1:8731/v1/session/stop \
 
 ## Next References
 
+- [Install Guide](./install.md)
+- [Compatibility](./compatibility.md)
 - [API v1 Contract](./api/v1.md)
 - [Release Readiness](./release-readiness.md)
 - [CameraBridgeApp README](../apps/CameraBridgeApp/README.md)

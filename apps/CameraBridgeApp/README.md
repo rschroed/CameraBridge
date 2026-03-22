@@ -28,6 +28,10 @@ The packaged app is also the supported lifecycle manager for the bundled daemon:
 
 ## Local Packaging
 
+For external adopters, the supported install path is the signed GitHub Release
+artifact flow documented in [docs/install.md](../../docs/install.md). This
+section remains the contributor-focused local packaging path.
+
 Package a local `.app` bundle with:
 
 ```bash
@@ -77,6 +81,10 @@ Token: ~/Library/Application Support/CameraBridge/auth-token
 Log: ~/Library/Application Support/CameraBridge/Logs/camd.log
 Captures: ~/Library/Application Support/CameraBridge/Captures/
 ```
+
+For the supported packaged flow, external apps should rely on the localhost
+service and support-path artifacts above at runtime. They should not depend on
+hardcoded app-bundle path discovery.
 
 ## Manual Verification
 

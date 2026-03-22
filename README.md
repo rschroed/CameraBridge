@@ -19,6 +19,9 @@ metadata. It also includes the minimal menu bar app shell, the Python
 first-capture example, and the core v1 docs needed to run that flow end to end.
 Preview transport and broader client surfaces remain deferred until after v1.
 
+CameraBridge product releases start at `v0.x`. The supported localhost API
+surface remains `/v1`.
+
 In the shipped v1 permission flow, `CameraBridgeApp` owns the macOS camera
 permission prompt. `camd` reads live AVFoundation permission status directly
 for `/v1/permissions`, `/v1/permissions/request`, and the session-start
@@ -80,6 +83,8 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 
 - The documents below describe the shipped first-capture v1 slice and the
   deferred work that remains outside that slice.
+- [Install Guide](docs/install.md)
+- [Compatibility](docs/compatibility.md)
 - [Quick Start](docs/quick-start.md)
 - [Release Readiness](docs/release-readiness.md)
 - [Architecture Overview](docs/architecture-overview.md)
@@ -101,6 +106,23 @@ swift build
 swift test
 ```
 
+## External Install
+
+The supported external install flow uses signed GitHub Release artifacts, not a
+source checkout. Download the current `CameraBridgeApp-v0.x.y-macos.zip`,
+verify the checksum, move `CameraBridgeApp.app` to `/Applications`, and launch
+the app from there.
+
+Use these docs as the source of truth for external adopters:
+
+- [Install Guide](docs/install.md)
+- [Compatibility](docs/compatibility.md)
+
+`/Applications/CameraBridgeApp.app` is the supported user install target for
+the packaged flow. It is not the downstream runtime-discovery contract.
+External apps should rely on the localhost service and documented support-path
+artifacts at runtime.
+
 Package the local menu bar app bundle with:
 
 ```bash
@@ -113,6 +135,9 @@ can survive rebuilds more predictably than plain cdhash-only ad-hoc signing.
 If your machine previously granted camera access to an older packaged build,
 re-request permission once after adopting the newer packaging flow so macOS can
 record the updated local code requirement.
+
+For published external releases, use the signed and notarized GitHub Release
+artifact path instead of this local contributor packaging flow.
 
 The packaged app bundle, including the bundled `camd` executable, is written to:
 

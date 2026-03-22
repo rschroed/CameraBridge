@@ -128,6 +128,29 @@ Recommended labels:
 - `hardware-needed`
 - `agent-safe`
 
+## Release Workflow
+
+External CameraBridge releases should be published from GitHub tags, not from a
+local manually distributed app bundle.
+
+For the external release path:
+
+1. Tag the release with `v0.x.y`.
+2. Let the macOS release workflow build, sign, notarize, staple, zip, and
+   checksum the app bundle.
+3. Publish the signed artifact and checksum to GitHub Releases.
+4. Treat the GitHub Release assets as the source of truth for external adopters.
+
+Required GitHub Actions secrets:
+
+- `CAMERABRIDGE_DEVELOPER_ID_APPLICATION_CERT_P12_BASE64`
+- `CAMERABRIDGE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD`
+- `CAMERABRIDGE_CI_KEYCHAIN_PASSWORD`
+- `CAMERABRIDGE_SIGNING_IDENTITY`
+- `CAMERABRIDGE_NOTARY_KEY_ID`
+- `CAMERABRIDGE_NOTARY_ISSUER_ID`
+- `CAMERABRIDGE_NOTARY_PRIVATE_KEY`
+
 ## Definition Of Ready
 
 Before starting implementation, the issue should answer:
