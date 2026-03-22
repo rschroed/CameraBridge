@@ -11,6 +11,20 @@ This validation requires:
 
 It is intentionally manual. CI should continue to avoid hardware dependencies.
 
+## External Artifact Validation
+
+Before treating a GitHub Release as ready for external adopters, validate the
+published artifact path as well as the repo-local smoke test.
+
+Expected checks:
+
+- download the published `CameraBridgeApp-v0.x.y-macos.zip` asset from GitHub
+  Releases
+- verify the published checksum matches the downloaded zip
+- install the downloaded app bundle into `/Applications`
+- confirm Gatekeeper accepts launch of the notarized app
+- confirm the installed app can complete the packaged-flow smoke test
+
 ## First-Capture Smoke Test
 
 ### Goal
@@ -163,6 +177,10 @@ release:
 - [ ] Camera device model or built-in camera noted
 - [ ] `swift build` passed
 - [ ] `swift test` passed
+- [ ] Published GitHub Release zip downloaded successfully
+- [ ] Published checksum matched the downloaded zip
+- [ ] Installed app bundle launched successfully from `/Applications`
+- [ ] Gatekeeper accepted the notarized app
 - [ ] Packaged `CameraBridgeApp.app` launched successfully
 - [ ] `camd` started from the app and reported healthy on `127.0.0.1:8731`
 - [ ] Auth token file existed at `~/Library/Application Support/CameraBridge/auth-token`
