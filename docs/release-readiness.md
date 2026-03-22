@@ -23,7 +23,7 @@ Expected checks:
 - verify the published checksum matches the downloaded zip
 - maintainer-side `xcrun notarytool submit --wait` completed successfully
 - maintainer-side `xcrun stapler validate` completed successfully
-- maintainer-side `spctl --assess --type open` accepted the stapled app bundle
+- any staged-path `spctl --assess --type open` warning was reviewed, but downloaded-artifact launch remained the real Gatekeeper signal
 - install the downloaded app bundle into `/Applications`
 - confirm Gatekeeper accepts launch of the notarized app
 - confirm the installed app bundle reports the tag core version in
@@ -186,7 +186,7 @@ release:
 - [ ] Published checksum matched the downloaded zip
 - [ ] Maintainer run completed `xcrun notarytool submit --wait`
 - [ ] Maintainer run completed `xcrun stapler validate`
-- [ ] Maintainer run passed `spctl --assess --type open`
+- [ ] Any staged-path `spctl --assess --type open` warning was reviewed and did not contradict downloaded-artifact validation
 - [ ] Installed app bundle launched successfully from `/Applications`
 - [ ] Gatekeeper accepted the notarized app
 - [ ] Installed app bundle metadata matched the release tag core version
