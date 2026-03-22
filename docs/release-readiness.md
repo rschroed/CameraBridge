@@ -192,16 +192,22 @@ Fill this in during the manual run:
 
 ### Latest Recorded Run
 
-- Date: 2026-03-21
+- Date: 2026-03-22
 - Machine: Mac17,3
 - macOS version: 26.3.1 (25D2128)
 - Camera device: Insta360 Link 2
-- Result: Passed (pre-contract-cleanup run)
+- Result: Passed
 - Notes:
+  - Packaged `CameraBridgeApp.app` launched successfully
+  - Managed `camd` started from the app and reported healthy on `127.0.0.1:8731`
+  - App surfaced base URL, token path, log path, and captures path
   - `GET /health` returned `200 OK`
   - `GET /v1/permissions` returned `authorized`
-  - `POST /v1/permissions/request` returned `{"prompted":false,"status":"authorized"}`
+  - `POST /v1/permissions/request` returned `{"message":null,"next_step":null,"prompted":false,"status":"authorized"}`
   - A stale `~/Library/Application Support/CameraBridge/permission-state` file did not affect daemon permission responses
-  - `examples/python/capture_photo.py --device-id 0x1000002e1a4c04` completed successfully
-  - Capture artifact written to `~/Library/Application Support/CameraBridge/Captures/capture-20260321T194247439Z-e21df7e5-ca86-4529-982f-a4a511053f7e.jpg`
-  - This run predates the guided permission-response and app-supervised lifecycle cleanup and should be repeated before release
+  - `GET /v1/devices` returned the expected connected cameras, including `Insta360 Link 2`
+  - `examples/python/capture_photo.py --device-id 0x1220002e1a4c04` completed successfully
+  - Capture artifact written to `~/Library/Application Support/CameraBridge/Captures/capture-20260322T181648347Z-ed4b866a-ac2a-4791-8847-b1e893c702ca.jpg`
+  - `GET /v1/session` returned `stopped` after cleanup while preserving `active_device_id`
+  - `Stop CameraBridge Service` returned the app to the stopped state, removed `runtime-info.json`, and took `/health` down
+  - `Quit CameraBridge` exited the app cleanly and left no managed daemon running
