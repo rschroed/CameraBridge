@@ -3,14 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>CameraBridge | Native macOS camera access over localhost</title>
+    <title>CameraBridge | Local macOS camera service over localhost</title>
     <meta
       name="description"
-      content="CameraBridge is a local macOS camera service that exposes AVFoundation over a stable localhost API for apps, scripts, and local web tools."
+      content="CameraBridge is a local macOS camera service with a small, versioned localhost API for apps, scripts, and local software."
     />
     <meta
       property="og:title"
-      content="CameraBridge | Native macOS camera access over localhost"
+      content="CameraBridge | Local macOS camera service over localhost"
     />
     <meta
       property="og:description"
@@ -21,11 +21,11 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta
       name="twitter:title"
-      content="CameraBridge | Native macOS camera access over localhost"
+      content="CameraBridge | Local macOS camera service over localhost"
     />
     <meta
       name="twitter:description"
-      content="Local macOS camera access for apps and scripts without embedding AVFoundation."
+      content="A local macOS camera service for apps and scripts without embedding AVFoundation."
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -43,11 +43,11 @@
 
         <section class="hero-content" id="top">
           <p class="eyebrow">Local-only macOS camera service</p>
-          <h1>Native macOS camera access over localhost.</h1>
+          <h1>Local macOS camera service over localhost.</h1>
           <p class="hero-copy">
             CameraBridge exposes AVFoundation through a small, versioned local
-            API so desktop apps, local web tools, and scripts can use the camera
-            without embedding native macOS code.
+            API so apps, scripts, and local software can use the camera through
+            one narrow macOS service.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="https://github.com/rschroed/CameraBridge"
@@ -90,7 +90,7 @@
             <article class="card">
               <h3>Local workflows need a stable boundary</h3>
               <p>
-                Scripts, local web apps, and desktop apps can talk to one narrow
+                Apps, scripts, and local software can talk to one narrow
                 localhost API instead of embedding AVFoundation directly.
               </p>
             </article>
@@ -114,7 +114,7 @@
           <p class="section-copy">
             Clients talk HTTP. CameraBridge owns native camera interaction. macOS
             still owns permissions. The result is a predictable local boundary
-            instead of app-specific native camera code.
+            for local software instead of app-specific native camera code.
           </p>
         </section>
 
@@ -196,11 +196,10 @@ curl http://127.0.0.1:PORT/v1/permissions
 }</code></pre>
           </div>
           <p class="section-copy">
-            The early public surface is intentionally small. Start with health
-            and permission visibility, then grow into device, session, and
-            capture flows as v1 is completed. Mutating routes are planned to use
-            bearer-token protection, with ownership established implicitly when a
-            client starts the session.
+            The shipped v1 surface is intentionally small: health, permission
+            visibility, device discovery, session control, and still capture.
+            Mutating routes use bearer-token protection, with ownership
+            established implicitly when a client starts the session.
           </p>
         </section>
 
@@ -211,7 +210,7 @@ curl http://127.0.0.1:PORT/v1/permissions
               <h2>Use the repo as the source of truth.</h2>
               <p>
                 Read the docs, track the current implementation status, and
-                follow the API contract as CameraBridge v1 comes together.
+                follow the API contract for the current CameraBridge v1 slice.
               </p>
             </div>
             <div class="cta-actions">
