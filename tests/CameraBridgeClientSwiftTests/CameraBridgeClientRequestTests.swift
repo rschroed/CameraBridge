@@ -59,7 +59,7 @@ func permissionRequestSendsBearerTokenAndEmptyJSONBody() async throws {
         transport: { request in
             await recorder.record(request)
             return (
-                Data(#"{"prompted":false,"status":"authorized"}"#.utf8),
+                Data(#"{"prompted":false,"status":"authorized","message":null,"next_step":null}"#.utf8),
                 makeHTTPResponse(for: request, statusCode: 200)
             )
         }
@@ -68,7 +68,7 @@ func permissionRequestSendsBearerTokenAndEmptyJSONBody() async throws {
     let result = try await client.requestPermission()
     let recordedRequest = await recorder.currentRequest()
 
-    #expect(result == .init(status: .authorized, prompted: false))
+    #expect(result == .init(status: .authorized, prompted: false, message: nil, nextStep: nil))
     #expect(recordedRequest?.method == "POST")
     #expect(recordedRequest?.url == "http://127.0.0.1:8731/v1/permissions/request")
     #expect(recordedRequest?.authorization == "Bearer test-token")
@@ -77,24 +77,25 @@ func permissionRequestSendsBearerTokenAndEmptyJSONBody() async throws {
 }
 
 @Test
-func permissionRequestSurfacesUndecidedPermissionGuidance() async {
+func permissionRequestReturnsGuidedNextStepForUndecidedPermission() async throws {
     let client = CameraBridgeClient(
         tokenProvider: { nil },
         transport: { request in
             (
-                Data(#"{"error":{"code":"invalid_state","message":"Camera permission must be requested from CameraBridgeApp"}}"#.utf8),
-                makeHTTPResponse(for: request, statusCode: 409)
+                Data(#"{"prompted":false,"status":"not_determined","message":"Open CameraBridgeApp to request camera access.","next_step":{"kind":"open_camera_bridge_app"}}"#.utf8),
+                makeHTTPResponse(for: request, statusCode: 200)
             )
         }
     )
 
-    await #expect(throws: CameraBridgeClientError.requestFailed(
-        statusCode: 409,
-        code: "invalid_state",
-        message: "Camera permission must be requested from CameraBridgeApp"
-    )) {
-        _ = try await client.requestPermission()
-    }
+    let result = try await client.requestPermission()
+
+    #expect(result == .init(
+        status: .notDetermined,
+        prompted: false,
+        message: "Open CameraBridgeApp to request camera access.",
+        nextStep: .init(kind: .openCameraBridgeApp)
+    ))
 }
 
 @Test

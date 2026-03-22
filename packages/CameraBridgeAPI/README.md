@@ -16,7 +16,8 @@ The current v1 surface includes:
 - `POST /v1/capture/photo`
 
 `POST /v1/permissions/request` does not invoke the macOS permission prompt from
-the daemon. It returns the live daemon-visible permission state and directs
-callers to `CameraBridgeApp` when permission is still undecided. The route
-remains in the API as the stable token-protected programmatic permission-check
-endpoint for local clients.
+the daemon. It returns the live daemon-visible permission state with
+`prompted: false` for all permission states. When permission is still
+undecided, the response remains `200 OK` and includes guided next-step data
+that directs callers to `CameraBridgeApp`. The route remains in the API as the
+stable token-protected programmatic permission-check endpoint for local clients.

@@ -6,19 +6,29 @@ import Foundation
 struct ServerConfiguration: Sendable, Equatable {
     static let defaultHost = "127.0.0.1"
     static let defaultPort: UInt16 = 8731
+    static let hostEnvironmentVariable = "CAMERABRIDGE_HOST"
+    static let portEnvironmentVariable = "CAMERABRIDGE_PORT"
     static let authTokenEnvironmentVariable = "CAMERABRIDGE_AUTH_TOKEN"
+    static let runtimeOwnershipEnvironmentVariable = "CAMERABRIDGE_RUNTIME_OWNERSHIP"
 
     var host: String
     var port: UInt16
     var authToken: String?
 
     init(
-        host: String = ServerConfiguration.defaultHost,
-        port: UInt16 = ServerConfiguration.defaultPort,
-        authToken: String? = ProcessInfo.processInfo.environment[ServerConfiguration.authTokenEnvironmentVariable]
+        host: String? = nil,
+        port: UInt16? = nil,
+        authToken: String? = ProcessInfo.processInfo.environment[ServerConfiguration.authTokenEnvironmentVariable],
+        runtimeConfigurationStore: DefaultCameraBridgeRuntimeConfigurationStore = DefaultCameraBridgeRuntimeConfigurationStore()
     ) {
-        self.host = host
-        self.port = port
+        let storedConfiguration = (try? runtimeConfigurationStore.loadConfiguration()) ??
+            CameraBridgeRuntimeConfiguration()
+        self.host = host ??
+            ProcessInfo.processInfo.environment[ServerConfiguration.hostEnvironmentVariable] ??
+            storedConfiguration.host
+        self.port = port ??
+            Self.environmentPortValue() ??
+            storedConfiguration.port
         self.authToken = authToken
     }
 
@@ -33,6 +43,25 @@ struct ServerConfiguration: Sendable, Equatable {
         }
 
         return try authTokenStore.loadOrCreateToken()
+    }
+
+    func resolvedRuntimeOwnership() -> CameraBridgeRuntimeOwnership {
+        guard let rawValue =
+            ProcessInfo.processInfo.environment[ServerConfiguration.runtimeOwnershipEnvironmentVariable],
+            let ownership = CameraBridgeRuntimeOwnership(rawValue: rawValue)
+        else {
+            return .external
+        }
+
+        return ownership
+    }
+
+    private static func environmentPortValue() -> UInt16? {
+        guard let rawValue = ProcessInfo.processInfo.environment[portEnvironmentVariable] else {
+            return nil
+        }
+
+        return UInt16(rawValue)
     }
 }
 
@@ -92,6 +121,21 @@ struct CameraBridgeDaemon {
         let port = try server.start()
         logger("camd ready on \(configuration.host):\(port)")
         return server
+    }
+
+    func runtimeInfo(
+        boundPort: UInt16,
+        authTokenStore: DefaultCameraBridgeAuthTokenStore = DefaultCameraBridgeAuthTokenStore()
+    ) throws -> CameraBridgeRuntimeInfo {
+        CameraBridgeRuntimeInfo(
+            pid: Int32(ProcessInfo.processInfo.processIdentifier),
+            host: configuration.host,
+            port: boundPort,
+            tokenFileURL: try authTokenStore.authTokenURL(),
+            logFileURL: try CameraBridgeSupportPaths.logFileURL(),
+            capturesDirectoryURL: try CameraBridgeSupportPaths.capturesDirectoryURL(),
+            ownership: configuration.resolvedRuntimeOwnership()
+        )
     }
 }
 

@@ -34,11 +34,11 @@ CameraBridge is:
 
 CameraBridge owns:
 
-- camera permission state and requests
+- camera permission state and app-assisted permission requests
 - device discovery
 - capture session lifecycle
 - still image capture
-- minimal runtime state
+- minimal runtime state, runtime config, and runtime metadata
 
 CameraBridge does NOT own:
 
@@ -129,6 +129,7 @@ No AVFoundation logic and no parallel permission state.
 - process entrypoint
 - config + bootstrap
 - dependency wiring
+- writes runtime metadata for the packaged app flow
 
 No domain logic.
 
@@ -140,17 +141,20 @@ No domain logic.
 - onboarding
 - status display
 - app-owned camera permission prompting
+- packaged daemon lifecycle control
+- developer-facing connection info
 
 No backend logic.
 
-## 5.1 Current v1 permission ownership note
+## 5.1 Current v1 permission and lifecycle model
 
-The current shipped v1 permission model is intentionally narrow but not yet the
-final architectural end state:
+The current shipped v1 packaged flow is intentionally narrow:
 
 - `CameraBridgeApp` owns the macOS permission prompt
 - `camd` reads live AVFoundation permission status for `/v1/permissions`, `/v1/permissions/request`, and session-start validation
-- source-of-truth consolidation for permission state remains deferred follow-up work after the shipped behavior is documented clearly
+- `POST /v1/permissions/request` remains API-first and returns guided next-step data when permission is still `not_determined`
+- the packaged app supervises the bundled daemon with explicit start, stop, and quit semantics
+- runtime configuration and runtime metadata live under Application Support so the app can surface effective connection details without repo-specific knowledge
 
 ---
 

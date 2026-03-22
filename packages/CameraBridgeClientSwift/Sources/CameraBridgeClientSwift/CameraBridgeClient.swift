@@ -10,10 +10,31 @@ public enum CameraBridgePermissionStatus: String, Sendable, CaseIterable, Equata
 public struct CameraBridgePermissionRequestResult: Sendable, Equatable {
     public var status: CameraBridgePermissionStatus
     public var prompted: Bool
+    public var message: String?
+    public var nextStep: CameraBridgePermissionNextStep?
 
-    public init(status: CameraBridgePermissionStatus, prompted: Bool) {
+    public init(
+        status: CameraBridgePermissionStatus,
+        prompted: Bool,
+        message: String? = nil,
+        nextStep: CameraBridgePermissionNextStep? = nil
+    ) {
         self.status = status
         self.prompted = prompted
+        self.message = message
+        self.nextStep = nextStep
+    }
+}
+
+public enum CameraBridgePermissionNextStepKind: String, Sendable, CaseIterable, Equatable {
+    case openCameraBridgeApp = "open_camera_bridge_app"
+}
+
+public struct CameraBridgePermissionNextStep: Sendable, Equatable {
+    public var kind: CameraBridgePermissionNextStepKind
+
+    public init(kind: CameraBridgePermissionNextStepKind) {
+        self.kind = kind
     }
 }
 
@@ -146,7 +167,22 @@ public struct CameraBridgeClient {
             throw CameraBridgeClientError.invalidStatus(response.status)
         }
 
-        return CameraBridgePermissionRequestResult(status: status, prompted: response.prompted)
+        let nextStep: CameraBridgePermissionNextStep?
+        if let responseNextStep = response.nextStep {
+            guard let kind = CameraBridgePermissionNextStepKind(rawValue: responseNextStep.kind) else {
+                throw CameraBridgeClientError.invalidStatus(responseNextStep.kind)
+            }
+            nextStep = CameraBridgePermissionNextStep(kind: kind)
+        } else {
+            nextStep = nil
+        }
+
+        return CameraBridgePermissionRequestResult(
+            status: status,
+            prompted: response.prompted,
+            message: response.message,
+            nextStep: nextStep
+        )
     }
 
     public func devices() async throws -> [CameraBridgeDevice] {
@@ -308,6 +344,19 @@ private struct PermissionStatusResponse: Decodable {
 private struct PermissionRequestResponse: Decodable {
     var status: String
     var prompted: Bool
+    var message: String?
+    var nextStep: PermissionRequestNextStepResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case prompted
+        case message
+        case nextStep = "next_step"
+    }
+}
+
+private struct PermissionRequestNextStepResponse: Decodable {
+    var kind: String
 }
 
 private struct DevicesResponse: Decodable {

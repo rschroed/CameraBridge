@@ -184,11 +184,15 @@ public enum CameraBridgeRoutes {
             }
 
             let currentPermissionState = controller.currentPermissionState()
-            guard currentPermissionState != .notDetermined else {
-                return .error(
-                    statusCode: 409,
-                    code: "invalid_state",
-                    message: "Camera permission must be requested from CameraBridgeApp"
+            if currentPermissionState == .notDetermined {
+                return .json(
+                    statusCode: 200,
+                    body: PermissionRequestResponse(
+                        status: currentPermissionState.rawValue,
+                        prompted: false,
+                        message: "Open CameraBridgeApp to request camera access.",
+                        nextStep: .init(kind: PermissionRequestNextStepKind.openCameraBridgeApp.rawValue)
+                    )
                 )
             }
 
@@ -728,11 +732,60 @@ private struct ErrorBody: Encodable, Equatable {
 private struct PermissionRequestResponse: Encodable, Equatable {
     var status: String
     var prompted: Bool
+    var message: String?
+    var nextStep: PermissionRequestNextStepResponse?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case prompted
+        case message
+        case nextStep = "next_step"
+    }
 
     init(result: PermissionRequestResult) {
         self.status = result.status.rawValue
         self.prompted = result.prompted
+        self.message = nil
+        self.nextStep = nil
     }
+
+    init(
+        status: String,
+        prompted: Bool,
+        message: String?,
+        nextStep: PermissionRequestNextStepResponse?
+    ) {
+        self.status = status
+        self.prompted = prompted
+        self.message = message
+        self.nextStep = nextStep
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(status, forKey: .status)
+        try container.encode(prompted, forKey: .prompted)
+
+        if let message {
+            try container.encode(message, forKey: .message)
+        } else {
+            try container.encodeNil(forKey: .message)
+        }
+
+        if let nextStep {
+            try container.encode(nextStep, forKey: .nextStep)
+        } else {
+            try container.encodeNil(forKey: .nextStep)
+        }
+    }
+}
+
+private enum PermissionRequestNextStepKind: String, Equatable {
+    case openCameraBridgeApp = "open_camera_bridge_app"
+}
+
+private struct PermissionRequestNextStepResponse: Encodable, Equatable {
+    var kind: String
 }
 
 private struct DevicesResponse: Encodable, Equatable {

@@ -87,6 +87,63 @@ func permissionStateStoreRejectsInvalidStoredState() throws {
     }
 }
 
+@Test
+func runtimeConfigurationStoreDefaultsToLocalhostConfigurationWhenFileIsMissing() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let store = DefaultCameraBridgeRuntimeConfigurationStore(baseDirectoryURL: directoryURL)
+
+    #expect(try store.loadConfiguration() == .init())
+}
+
+@Test
+func runtimeConfigurationStoreSavesAndReloadsConfiguration() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let store = DefaultCameraBridgeRuntimeConfigurationStore(baseDirectoryURL: directoryURL)
+    let configuration = CameraBridgeRuntimeConfiguration(host: "127.0.0.1", port: 9123)
+
+    try store.saveConfiguration(configuration)
+
+    #expect(try store.loadConfiguration() == configuration)
+    #expect(FileManager.default.fileExists(atPath: try store.runtimeConfigurationURL().path))
+}
+
+@Test
+func runtimeInfoStoreReturnsNilWhenFileIsMissing() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let store = DefaultCameraBridgeRuntimeInfoStore(baseDirectoryURL: directoryURL)
+
+    #expect(try store.loadRuntimeInfo() == nil)
+}
+
+@Test
+func runtimeInfoStoreSavesReloadsAndClearsRuntimeInfo() throws {
+    let directoryURL = makeTemporaryDirectoryURL()
+    defer { try? FileManager.default.removeItem(at: directoryURL) }
+
+    let store = DefaultCameraBridgeRuntimeInfoStore(baseDirectoryURL: directoryURL)
+    let runtimeInfo = CameraBridgeRuntimeInfo(
+        pid: 42,
+        host: "127.0.0.1",
+        port: 8731,
+        tokenFileURL: directoryURL.appendingPathComponent("auth-token", isDirectory: false),
+        logFileURL: directoryURL.appendingPathComponent("Logs/camd.log", isDirectory: false),
+        capturesDirectoryURL: directoryURL.appendingPathComponent("Captures", isDirectory: true),
+        ownership: .appManaged
+    )
+
+    try store.saveRuntimeInfo(runtimeInfo)
+    #expect(try store.loadRuntimeInfo() == runtimeInfo)
+
+    try store.clearRuntimeInfo()
+    #expect(try store.loadRuntimeInfo() == nil)
+}
+
 private func makeTemporaryDirectoryURL() -> URL {
     FileManager.default.temporaryDirectory
         .appendingPathComponent(UUID().uuidString, isDirectory: true)
