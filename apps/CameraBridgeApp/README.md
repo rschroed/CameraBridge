@@ -12,14 +12,8 @@ The app remains a thin client of the localhost CameraBridge service. Its menu ba
 - quitting the app
 
 `CameraBridgeApp` is the only supported camera-permission prompt initiator in v1.
-It reads and requests camera access through the app bundle, then syncs the
-observed permission state to:
-
-```text
-~/Library/Application Support/CameraBridge/permission-state
-```
-
-The bundled daemon reads that stored permission state for `/v1/permissions`,
+It reads and requests camera access through the app bundle. The bundled daemon
+reads live AVFoundation permission status directly for `/v1/permissions`,
 `/v1/permissions/request`, and session-start preconditions.
 
 ## Local Packaging
@@ -63,7 +57,7 @@ Use the packaged app bundle for manual verification:
 4. With permission not yet granted, confirm `Request Camera Access` is enabled even before the service is started.
 5. After starting the service, confirm the menu updates to show the running state.
 6. Confirm that clicking `Request Camera Access` prompts from `CameraBridgeApp`.
-7. After granting permission, confirm the menu reports that CameraBridge is ready and `~/Library/Application Support/CameraBridge/permission-state` contains `authorized`.
+7. After granting permission, confirm the menu reports that CameraBridge is ready.
 8. If service launch or permission request fails, confirm the last error row appears with readable wording.
 
 Capture screenshots of the refined menu states when practical for PR notes.

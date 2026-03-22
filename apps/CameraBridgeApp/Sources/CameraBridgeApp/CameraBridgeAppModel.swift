@@ -155,14 +155,12 @@ final class CameraBridgeAppModel {
 
     private let client: any CameraBridgeAppClient
     private let permissionController: any CameraBridgeAppPermissionControlling
-    private let permissionStateStore: any CameraBridgePermissionStateWriting
     private let serviceLauncher: any CameraBridgeServiceLaunching
 
     init(
         client: (any CameraBridgeAppClient)? = nil,
         authTokenStore: any CameraBridgeAuthTokenReading = DefaultCameraBridgeAuthTokenStore(),
         permissionController: (any CameraBridgeAppPermissionControlling)? = nil,
-        permissionStateStore: any CameraBridgePermissionStateWriting = DefaultCameraBridgePermissionStateStore(),
         serviceLauncher: (any CameraBridgeServiceLaunching)? = nil
     ) {
         let resolvedClient = client ?? CameraBridgeClient(
@@ -172,7 +170,6 @@ final class CameraBridgeAppModel {
         )
         self.client = resolvedClient
         self.permissionController = permissionController ?? AVFoundationCameraBridgeAppPermissionController()
-        self.permissionStateStore = permissionStateStore
         self.serviceLauncher = serviceLauncher ?? LocalCameraBridgeServiceLauncher(client: resolvedClient)
     }
 
@@ -226,11 +223,10 @@ final class CameraBridgeAppModel {
 
     private func refreshState() async {
         let permissionStatus = permissionController.currentPermissionStatus()
-        let syncError = syncPermissionState(permissionStatus)
         let isRunning = await client.serviceIsRunning()
         serviceStatus = isRunning ? .running : .stopped
         permissionDisplay = .init(permissionStatus: permissionStatus)
-        lastError = syncError.map(displayMessage(for:))
+        lastError = nil
         publishChange()
     }
 
@@ -249,7 +245,6 @@ final class CameraBridgeAppModel {
         } catch {
             serviceStatus = .failed(displayMessage(for: error))
             let permissionStatus = permissionController.currentPermissionStatus()
-            _ = syncPermissionState(permissionStatus)
             permissionDisplay = .init(permissionStatus: permissionStatus)
             lastError = displayMessage(for: error)
             publishChange()
@@ -271,23 +266,8 @@ final class CameraBridgeAppModel {
             publishChange()
         }
 
-        let result = await permissionController.requestPermission()
-        if let syncError = syncPermissionState(result.status) {
-            permissionDisplay = .init(permissionStatus: result.status)
-            lastError = displayMessage(for: syncError)
-            return
-        }
-
+        _ = await permissionController.requestPermission()
         await refreshState()
-    }
-
-    private func syncPermissionState(_ permissionStatus: CameraBridgePermissionStatus) -> Error? {
-        do {
-            try permissionStateStore.savePermissionState(.init(permissionStatus: permissionStatus))
-            return nil
-        } catch {
-            return error
-        }
     }
 
     private func displayMessage(for error: Error) -> String {
@@ -305,8 +285,6 @@ final class CameraBridgeAppModel {
             return launchError.errorDescription ?? "Service failed to start"
         case let authTokenError as CameraBridgeAuthTokenError:
             return authTokenError.errorDescription ?? "Auth token setup failed"
-        case let permissionStateStoreError as CameraBridgePermissionStateStoreError:
-            return permissionStateStoreError.errorDescription ?? "Permission state sync failed"
         default:
             return error.localizedDescription
         }
@@ -361,12 +339,6 @@ struct AVFoundationCameraBridgeAppPermissionController: CameraBridgeAppPermissio
         }
     }
 }
-
-protocol CameraBridgePermissionStateWriting {
-    func savePermissionState(_ state: CameraBridgeStoredPermissionState) throws
-}
-
-extension DefaultCameraBridgePermissionStateStore: CameraBridgePermissionStateWriting {}
 
 @MainActor
 protocol CameraBridgeServiceLaunching {
@@ -466,21 +438,6 @@ final class LocalCameraBridgeServiceLauncher: CameraBridgeServiceLaunching {
         let handle = try FileHandle(forWritingTo: logURL)
         try handle.seekToEnd()
         return handle
-    }
-}
-
-private extension CameraBridgeStoredPermissionState {
-    init(permissionStatus: CameraBridgePermissionStatus) {
-        switch permissionStatus {
-        case .notDetermined:
-            self = .notDetermined
-        case .restricted:
-            self = .restricted
-        case .denied:
-            self = .denied
-        case .authorized:
-            self = .authorized
-        }
     }
 }
 

@@ -60,14 +60,9 @@ When `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the lo
 
 The packaged app uses that same daemon-owned token contract when it launches the bundled service.
 
-`CameraBridgeApp` also writes the current permission state to:
-
-```text
-~/Library/Application Support/CameraBridge/permission-state
-```
-
-The daemon consumes that stored state for `/v1/permissions`,
-`/v1/permissions/request`, and the session-start permission precondition.
+The daemon reads live AVFoundation permission status directly for
+`/v1/permissions`, `/v1/permissions/request`, and the session-start permission
+precondition.
 
 The packaged app starts `camd` as a localhost-only service intended to be reachable from other local clients at `127.0.0.1:8731`.
 
@@ -92,8 +87,10 @@ curl -s http://127.0.0.1:8731/v1/devices
 ```
 
 If permission is already decided, `POST /v1/permissions/request` returns the
-stored state with `prompted: false`. If it returns `409 invalid_state`, go back
-to the menu bar app and request access there.
+current daemon-visible status with `prompted: false`. The route remains in the
+API so local clients have a stable token-protected way to check whether
+permission is now usable. If it returns `409 invalid_state`, go back to the
+menu bar app and request access there.
 
 The mutating endpoints use the bearer token from Application Support:
 

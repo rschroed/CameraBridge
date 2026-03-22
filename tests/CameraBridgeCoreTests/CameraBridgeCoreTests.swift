@@ -298,6 +298,58 @@ func defaultCameraSessionControllerRejectsStartWithoutAuthorizedPermission() {
 }
 
 @Test
+func defaultCameraSessionControllerRejectsStartWhenPermissionIsNotDetermined() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(activeDeviceID: "camera-1")
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-1", permissionState: .notDetermined)
+        Issue.record("Expected session start without decided permission to fail")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .permissionRequired(status: .notDetermined))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.permissionState == .notDetermined)
+    #expect(state.sessionState == .stopped)
+    #expect(state.lastError == CameraStateError(message: "Camera permission is not_determined"))
+}
+
+@Test
+func defaultCameraSessionControllerRejectsStartWhenPermissionIsRestricted() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        initialState: CameraState(activeDeviceID: "camera-1")
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-1", permissionState: .restricted)
+        Issue.record("Expected session start with restricted permission to fail")
+    } catch let error as CameraSessionLifecycleError {
+        #expect(error == .permissionRequired(status: .restricted))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.permissionState == .restricted)
+    #expect(state.sessionState == .stopped)
+    #expect(state.lastError == CameraStateError(message: "Camera permission is restricted"))
+}
+
+@Test
 func defaultCameraSessionControllerRejectsStartForOwnerConflict() {
     let controller = DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(

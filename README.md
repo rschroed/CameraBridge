@@ -20,9 +20,9 @@ and the core v1 docs needed to run that flow end to end. Preview transport and
 broader client surfaces remain deferred until after v1.
 
 In the shipped v1 permission flow, `CameraBridgeApp` owns the macOS camera
-permission prompt and syncs the resulting permission state into Application
-Support. `camd` reads that stored state for `/v1/permissions`,
-`/v1/permissions/request`, and the session-start permission precondition.
+permission prompt. `camd` reads live AVFoundation permission status directly
+for `/v1/permissions`, `/v1/permissions/request`, and the session-start
+permission precondition.
 
 ## v1 Auth And Ownership
 
@@ -32,7 +32,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
 - mutating endpoints use a bearer token or equivalent local secret
 - when `camd` starts without `CAMERABRIDGE_AUTH_TOKEN`, it loads or creates the local bearer token at `~/Library/Application Support/CameraBridge/auth-token`
 - `CameraBridgeApp` performs permission prompting when access is still `not_determined`
-- `POST /v1/permissions/request` does not prompt from `camd`; it returns current daemon-visible state or guidance to use `CameraBridgeApp`
+- `POST /v1/permissions/request` does not prompt from `camd`; it remains the token-protected programmatic permission-check route and returns current daemon-visible state or guidance to use `CameraBridgeApp`
 - v1 does not add separate session `claim` or `release` endpoints
 - successful `POST /v1/session/start` establishes implicit session ownership
 - session ownership is released by `POST /v1/session/stop` or when the session ends

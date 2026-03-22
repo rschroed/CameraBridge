@@ -63,7 +63,6 @@ Expected checkpoints:
 
 - the macOS permission prompt appears from `CameraBridgeApp` when status is `not_determined`
 - the menu reaches `Permission: Authorized`
-- `~/Library/Application Support/CameraBridge/permission-state` contains `authorized`
 - failures are surfaced in the menu with readable text
 
 5. Verify the local API:
@@ -85,6 +84,23 @@ Expected checkpoints:
 - `/v1/permissions` returns `authorized`
 - `/v1/permissions/request` returns `{"prompted":false,"status":"authorized"}`
 - `/v1/devices` returns at least one real camera device
+
+5a. Verify stale file non-involvement:
+
+```bash
+mkdir -p ~/Library/Application\ Support/CameraBridge
+printf 'denied' > ~/Library/Application\ Support/CameraBridge/permission-state
+curl -s http://127.0.0.1:8731/v1/permissions
+curl -s -X POST http://127.0.0.1:8731/v1/permissions/request \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{}'
+```
+
+Expected checkpoints:
+
+- the stale `permission-state` file does not change daemon permission responses
+- `/v1/permissions` and `/v1/permissions/request` still reflect live OS permission state
 
 6. Run the first-capture example with a real device id:
 
@@ -117,7 +133,7 @@ Record any failure in these areas:
 - auth token file is missing or unreadable
 - permission prompt does not appear when expected
 - permission state does not update after the prompt
-- permission-state file is missing, invalid, or stale
+- daemon permission routes do not reflect live OS permission state
 - device listing is empty despite connected hardware
 - session start or device selection fails unexpectedly
 - capture fails or no artifact is written
@@ -135,9 +151,10 @@ release:
 - [ ] Packaged `CameraBridgeApp.app` launched successfully
 - [ ] `camd` started from the app and reported healthy on `127.0.0.1:8731`
 - [ ] Auth token file existed at `~/Library/Application Support/CameraBridge/auth-token`
-- [ ] Permission-state file existed at `~/Library/Application Support/CameraBridge/permission-state`
 - [ ] Camera permission reached `authorized`
+- [ ] `GET /v1/permissions` reflected live OS permission state
 - [ ] `POST /v1/permissions/request` returned `prompted:false` after authorization
+- [ ] Stale `permission-state` file had no effect on daemon permission responses
 - [ ] `GET /v1/devices` returned the expected camera
 - [ ] Python first-capture example completed successfully
 - [ ] Capture artifact existed at the reported `local_path`
@@ -163,9 +180,9 @@ Fill this in during the manual run:
 - Camera device: Insta360 Link 2
 - Result: Passed
 - Notes:
-  - Packaged `CameraBridgeApp.app` wrote `~/Library/Application Support/CameraBridge/permission-state`
   - `GET /health` returned `200 OK`
   - `GET /v1/permissions` returned `authorized`
   - `POST /v1/permissions/request` returned `{"prompted":false,"status":"authorized"}`
+  - A stale `~/Library/Application Support/CameraBridge/permission-state` file did not affect daemon permission responses
   - `examples/python/capture_photo.py --device-id 0x1000002e1a4c04` completed successfully
   - Capture artifact written to `~/Library/Application Support/CameraBridge/Captures/capture-20260321T194247439Z-e21df7e5-ca86-4529-982f-a4a511053f7e.jpg`
