@@ -28,9 +28,10 @@ The packaged app is also the supported lifecycle manager for the bundled daemon:
 
 ## Local Packaging
 
-For external adopters, the supported install path is the signed GitHub Release
-artifact flow documented in [docs/install.md](../../docs/install.md). This
-section remains the contributor-focused local packaging path.
+For external adopters, the supported install path is the official
+maintainer-signed and maintainer-notarized GitHub Release artifact flow
+documented in [docs/install.md](../../docs/install.md). This section remains
+the contributor-focused local packaging path.
 
 Package a local `.app` bundle with:
 

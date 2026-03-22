@@ -18,7 +18,8 @@ on finding or inspecting the app bundle path.
 
 ## Install
 
-1. Download the current signed release assets from GitHub Releases:
+1. Download the current official maintainer-signed and maintainer-notarized
+   release assets from GitHub Releases:
    - `CameraBridgeApp-v0.x.y-macos.zip`
    - `CameraBridgeApp-v0.x.y-macos.zip.sha256`
 2. Verify the checksum before installation:
@@ -91,3 +92,6 @@ Full uninstall:
    - `runtime-info.json`
    - `Logs/`
    - `Captures/`
+
+For maintainers producing those official artifacts, use
+[docs/release-process.md](./release-process.md).

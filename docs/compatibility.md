@@ -10,6 +10,8 @@ CameraBridge adopters.
 - downstream apps should pin to an explicit tested CameraBridge release or a
   narrow tested `v0.x` range
 - broad “latest” dependencies are not supported
+- official external release artifacts are maintainer-signed and
+  maintainer-notarized before publication to GitHub Releases
 
 ## Supported Runtime Contract
 

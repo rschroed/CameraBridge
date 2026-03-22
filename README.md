@@ -85,6 +85,7 @@ CameraBridge v1 keeps the trust model intentionally narrow:
   deferred work that remains outside that slice.
 - [Install Guide](docs/install.md)
 - [Compatibility](docs/compatibility.md)
+- [Release Process](docs/release-process.md)
 - [Quick Start](docs/quick-start.md)
 - [Release Readiness](docs/release-readiness.md)
 - [Architecture Overview](docs/architecture-overview.md)
@@ -136,8 +137,9 @@ If your machine previously granted camera access to an older packaged build,
 re-request permission once after adopting the newer packaging flow so macOS can
 record the updated local code requirement.
 
-For published external releases, use the signed and notarized GitHub Release
-artifact path instead of this local contributor packaging flow.
+For published external releases, use the official maintainer-signed and
+maintainer-notarized GitHub Release artifact path instead of this local
+contributor packaging flow.
 
 The packaged app bundle, including the bundled `camd` executable, is written to:
 

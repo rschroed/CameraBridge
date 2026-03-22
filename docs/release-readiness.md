@@ -18,8 +18,8 @@ published artifact path as well as the repo-local smoke test.
 
 Expected checks:
 
-- download the published `CameraBridgeApp-v0.x.y-macos.zip` asset from GitHub
-  Releases
+- download the published maintainer-produced
+  `CameraBridgeApp-v0.x.y-macos.zip` asset from GitHub Releases
 - verify the published checksum matches the downloaded zip
 - install the downloaded app bundle into `/Applications`
 - confirm Gatekeeper accepts launch of the notarized app

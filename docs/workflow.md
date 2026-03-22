@@ -130,26 +130,25 @@ Recommended labels:
 
 ## Release Workflow
 
-External CameraBridge releases should be published from GitHub tags, not from a
-local manually distributed app bundle.
+External CameraBridge releases should be published from GitHub Releases, but
+official signing and notarization happen on a trusted maintainer Mac rather
+than in GitHub Actions.
 
-For the external release path:
+For the official external release path:
 
-1. Tag the release with `v0.x.y`.
-2. Let the macOS release workflow build, sign, notarize, staple, zip, and
-   checksum the app bundle.
-3. Publish the signed artifact and checksum to GitHub Releases.
-4. Treat the GitHub Release assets as the source of truth for external adopters.
+1. Follow the maintainer procedure in `docs/release-process.md`.
+2. Produce the official zip and checksum locally on the trusted maintainer Mac.
+3. Publish those artifacts to GitHub Releases.
+4. Treat the uploaded GitHub Release assets as the source of truth for
+   external adopters.
 
-Required GitHub Actions secrets:
+The repository keeps a validation-only release workflow for:
 
-- `CAMERABRIDGE_DEVELOPER_ID_APPLICATION_CERT_P12_BASE64`
-- `CAMERABRIDGE_DEVELOPER_ID_APPLICATION_CERT_PASSWORD`
-- `CAMERABRIDGE_CI_KEYCHAIN_PASSWORD`
-- `CAMERABRIDGE_SIGNING_IDENTITY`
-- `CAMERABRIDGE_NOTARY_KEY_ID`
-- `CAMERABRIDGE_NOTARY_ISSUER_ID`
-- `CAMERABRIDGE_NOTARY_PRIVATE_KEY`
+- tag/version shape validation
+- required release-doc checks
+- optional post-publication asset-name validation
+
+GitHub Actions is not the signing authority for official CameraBridge releases.
 
 ## Definition Of Ready
 
