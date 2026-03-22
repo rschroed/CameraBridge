@@ -1,4 +1,3 @@
-import CameraBridgeAPI
 import Foundation
 
 public enum CameraBridgePermissionStatus: String, Sendable, CaseIterable, Equatable {
@@ -91,9 +90,6 @@ public struct CameraBridgeClient {
     public typealias Transport = @Sendable (URLRequest) async throws -> (Data, HTTPURLResponse)
 
     public var baseURL: URL
-    public var apiModuleName: String {
-        CameraBridgeAPIModule.name
-    }
 
     private let tokenProvider: TokenProvider
     private let transport: Transport

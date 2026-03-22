@@ -44,7 +44,6 @@ let package = Package(
         ),
         .target(
             name: "CameraBridgeClientSwift",
-            dependencies: ["CameraBridgeAPI"],
             path: "packages/CameraBridgeClientSwift/Sources/CameraBridgeClientSwift"
         ),
         .target(
