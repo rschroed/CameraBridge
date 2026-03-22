@@ -8,6 +8,7 @@ Official external releases are:
 - signed on a trusted maintainer Mac
 - notarized on that trusted maintainer Mac
 - published to GitHub Releases
+- stamped with bundle metadata derived from the tag core version
 
 GitHub Actions is not the signing or notarization authority for CameraBridge
 releases.
@@ -46,11 +47,15 @@ v0.x.y
    artifact script:
 
 ```bash
-export CAMERABRIDGE_SIGNING_IDENTITY="Developer ID Application: ..."
+export CAMERABRIDGE_SIGNING_IDENTITY="Developer ID Application: Ryan Schroeder (8QU25M896L)"
 export CAMERABRIDGE_NOTARY_KEY_ID="..."
 export CAMERABRIDGE_NOTARY_ISSUER_ID="..."
 export CAMERABRIDGE_NOTARY_PRIVATE_KEY="$(cat /path/to/AuthKey_XXXX.p8)"
 ```
+
+These are the only maintainer-side release inputs required by the current
+scripts. No provisioning profiles, App Store packaging, or additional
+certificate types are part of the release flow.
 
 4. Build the official release artifacts locally:
 
@@ -63,12 +68,20 @@ Expected outputs:
 - `dist/CameraBridgeApp-v0.x.y-macos.zip`
 - `dist/CameraBridgeApp-v0.x.y-macos.zip.sha256`
 
+Bundle metadata inside the packaged app is stamped from the tag core version.
+Examples:
+
+- `v0.2.0` -> `CFBundleShortVersionString=0.2.0`, `CFBundleVersion=0.2.0`
+- `v0.2.0-rc.1` -> `CFBundleShortVersionString=0.2.0`, `CFBundleVersion=0.2.0`
+
 The script is responsible for:
 
 - release-mode build
 - Developer ID signing
 - notarization submission
 - stapling
+- stapler validation
+- app-open Gatekeeper assessment
 - zip creation
 - checksum generation
 
@@ -101,6 +114,9 @@ gh release upload v0.x.y \
 
 - download the uploaded zip and checksum from GitHub Releases
 - verify the checksum against the downloaded zip
+- confirm the maintainer build completed `xcrun notarytool submit --wait`
+- confirm the maintainer build completed `xcrun stapler validate`
+- confirm the maintainer build completed `spctl --assess --type open` for the stapled app
 - install the downloaded app bundle into `/Applications`
 - confirm Gatekeeper accepts launch
 - complete the packaged-flow smoke test in `docs/release-readiness.md`
@@ -132,4 +148,5 @@ Official external release packaging:
 
 - uses `scripts/release/create-release-artifacts.sh --signing-mode developer-id`
 - is maintainer-signed and maintainer-notarized
+- stamps bundle metadata from the tag core version
 - produces the only official external release artifacts

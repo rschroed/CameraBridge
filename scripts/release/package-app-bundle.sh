@@ -14,6 +14,7 @@ BUILD_CONFIGURATION="release"
 OUTPUT_DIR=""
 SIGNING_MODE="adhoc"
 SIGNING_IDENTITY="${CAMERABRIDGE_SIGNING_IDENTITY:-}"
+BUNDLE_VERSION=""
 
 usage() {
     cat <<'EOF'
@@ -25,6 +26,7 @@ Options:
   --output-dir <path>
   --signing-mode <adhoc|developer-id>
   --signing-identity <identity>
+  --bundle-version <0.x.y>
 EOF
 }
 
@@ -44,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --signing-identity)
             SIGNING_IDENTITY="$2"
+            shift 2
+            ;;
+        --bundle-version)
+            BUNDLE_VERSION="$2"
             shift 2
             ;;
         --help|-h)
@@ -68,6 +74,11 @@ if [[ "$SIGNING_MODE" != "adhoc" && "$SIGNING_MODE" != "developer-id" ]]; then
     exit 1
 fi
 
+if [[ -n "$BUNDLE_VERSION" && ! "$BUNDLE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    echo "Bundle version must match 0.x.y when provided" >&2
+    exit 1
+fi
+
 cd "$ROOT_DIR"
 
 swift build --configuration "$BUILD_CONFIGURATION" --product "$APP_NAME"
@@ -87,6 +98,14 @@ cp "$BIN_DIR/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 cp "$ROOT_DIR/apps/CameraBridgeApp/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$BIN_DIR/$DAEMON_NAME" "$RESOURCES_DIR/$DAEMON_NAME"
 chmod +x "$RESOURCES_DIR/$DAEMON_NAME"
+
+if [[ -n "$BUNDLE_VERSION" ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $BUNDLE_VERSION" \
+        "$CONTENTS_DIR/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUNDLE_VERSION" \
+        "$CONTENTS_DIR/Info.plist"
+fi
+
 xattr -cr "$APP_DIR" || true
 
 sign_path() {
