@@ -103,7 +103,14 @@ if [[ "$SIGNING_MODE" == "developer-id" && "$SKIP_NOTARIZATION" != "1" ]]; then
 
     xcrun stapler staple "$APP_PATH"
     xcrun stapler validate "$APP_PATH"
-    spctl -a -vv --type open "$APP_PATH"
+
+    if ! SPCTL_OUTPUT="$(spctl -a -vv --type open "$APP_PATH" 2>&1)"; then
+        echo "Warning: staged app Gatekeeper assessment did not pass for $APP_PATH" >&2
+        echo "$SPCTL_OUTPUT" >&2
+        echo "Continue with downloaded-artifact validation from GitHub Releases before treating the release as ready." >&2
+    else
+        echo "$SPCTL_OUTPUT"
+    fi
 fi
 
 ditto -c -k --keepParent "$APP_PATH" "$RELEASE_ZIP"

@@ -81,7 +81,7 @@ The script is responsible for:
 - notarization submission
 - stapling
 - stapler validation
-- app-open Gatekeeper assessment
+- best-effort staged app-open Gatekeeper assessment
 - zip creation
 - checksum generation
 
@@ -116,7 +116,7 @@ gh release upload v0.x.y \
 - verify the checksum against the downloaded zip
 - confirm the maintainer build completed `xcrun notarytool submit --wait`
 - confirm the maintainer build completed `xcrun stapler validate`
-- confirm the maintainer build completed `spctl --assess --type open` for the stapled app
+- review any staged-path `spctl --assess --type open` warning from the maintainer build, but do not treat `source=Insufficient Context` on the staged app as a release blocker by itself
 - install the downloaded app bundle into `/Applications`
 - confirm Gatekeeper accepts launch
 - complete the packaged-flow smoke test in `docs/release-readiness.md`
