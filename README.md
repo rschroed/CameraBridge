@@ -1,6 +1,6 @@
 # CameraBridge
 
-CameraBridge is a local macOS camera service that exposes AVFoundation over a localhost API.
+CameraBridge is a local macOS camera service with a small, versioned localhost API for camera permissions, device discovery, session control, and still image capture.
 
 This repository is organized with strict package boundaries:
 
@@ -12,12 +12,12 @@ This repository is organized with strict package boundaries:
 - `docs/` for RFCs and API documentation
 - `examples/` for small example clients
 
-The repository currently ships the v1 first-capture loop: health, permission
-status and request, device listing and selection, session state, session
-lifecycle control, and still photo capture with local artifact metadata. It
-also includes the minimal menu bar app shell, the Python first-capture example,
-and the core v1 docs needed to run that flow end to end. Preview transport and
-broader client surfaces remain deferred until after v1.
+The repository currently ships a narrow v1 first-capture loop: health,
+permission status and request, device listing and selection, session state,
+session lifecycle control, and still photo capture with local artifact
+metadata. It also includes the minimal menu bar app shell, the Python
+first-capture example, and the core v1 docs needed to run that flow end to end.
+Preview transport and broader client surfaces remain deferred until after v1.
 
 In the shipped v1 permission flow, `CameraBridgeApp` owns the macOS camera
 permission prompt. `camd` reads live AVFoundation permission status directly

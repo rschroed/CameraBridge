@@ -2,13 +2,13 @@
 
 ## 1. Purpose
 
-CameraBridge is a local macOS camera service that exposes AVFoundation over a localhost API.
+CameraBridge is a local macOS camera service with a small, versioned localhost API for camera permissions, device discovery, session control, and still image capture.
 
 It exists to separate:
 - native camera complexity
 - from application-level logic
 
-This allows local apps (desktop apps, local web apps, scripts) to use the camera without embedding native macOS code.
+This gives apps, scripts, and other local software a narrow local boundary for camera access without embedding AVFoundation in every host app.
 
 ---
 
