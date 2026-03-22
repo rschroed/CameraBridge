@@ -36,6 +36,11 @@ swift test
 apps/CameraBridgeApp/scripts/package-app.sh
 ```
 
+Before treating camera permission continuity as a regression signal, note that
+older locally packaged builds used plain cdhash-only ad-hoc signing. After
+adopting the current packaging flow, re-grant camera access once so TCC can
+store the newer identifier-based local requirement for `CameraBridgeApp.app`.
+
 2. Launch the packaged app:
 
 ```bash
