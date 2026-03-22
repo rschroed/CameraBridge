@@ -62,9 +62,11 @@ A single, centralized representation of:
 - active device
 - last error
 
-This state lives in `CameraBridgeCore` and is the source of truth.
-Permission reads, permission requests, and permission-dependent session
-preconditions must all flow through this Core-owned state path.
+The camera and session state model lives in `CameraBridgeCore`.
+In the shipped v1 slice, permission prompting is performed by
+`CameraBridgeApp`, which syncs the resulting permission state to Application
+Support. `camd` and the session controller consume that stored state for
+permission reporting and permission-dependent session preconditions.
 The shipped v1 surface does not expose preview transport or preview endpoints.
 
 ---
@@ -105,7 +107,7 @@ Must never be inferred implicitly.
 - AVFoundation integration
 - domain models
 - state management
-- permission status and request coordination
+- session logic that consumes the daemon-visible permission state
 
 No HTTP, no UI.
 
@@ -116,7 +118,7 @@ No HTTP, no UI.
 - HTTP interface
 - request/response models
 - auth validation
-- translation of HTTP permission routes into Core-owned permission operations
+- translation of HTTP permission routes into the shipped daemon-visible permission behavior
 
 No AVFoundation logic and no parallel permission state.
 
@@ -141,6 +143,16 @@ No domain logic.
 - permission-state sync to Application Support
 
 No backend logic.
+
+## 5.1 Current v1 permission ownership note
+
+The current shipped v1 permission model is intentionally narrow but not yet the
+final architectural end state:
+
+- `CameraBridgeApp` owns the macOS permission prompt
+- the app writes the resulting permission state to `~/Library/Application Support/CameraBridge/permission-state`
+- `camd` reads that stored state for `/v1/permissions`, `/v1/permissions/request`, and session-start validation
+- source-of-truth consolidation for permission state remains deferred follow-up work after the shipped behavior is documented clearly
 
 ---
 
