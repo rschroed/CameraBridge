@@ -5,6 +5,10 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 APP_NAME="CameraBridgeApp"
 DAEMON_NAME="camd"
+APP_IDENTIFIER="io.camerabridge.CameraBridgeApp"
+DAEMON_IDENTIFIER="io.camerabridge.camd"
+APP_REQUIREMENT="designated => identifier \"$APP_IDENTIFIER\""
+DAEMON_REQUIREMENT="designated => identifier \"$DAEMON_IDENTIFIER\""
 
 cd "$ROOT_DIR"
 
@@ -25,6 +29,9 @@ cp "$ROOT_DIR/apps/CameraBridgeApp/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "$BIN_DIR/$DAEMON_NAME" "$RESOURCES_DIR/$DAEMON_NAME"
 chmod +x "$RESOURCES_DIR/$DAEMON_NAME"
 
-codesign --force --sign - "$APP_DIR" >/dev/null
+codesign --force --sign - -i "$DAEMON_IDENTIFIER" -r="$DAEMON_REQUIREMENT" \
+    "$RESOURCES_DIR/$DAEMON_NAME" >/dev/null
+codesign --force --sign - -i "$APP_IDENTIFIER" -r="$APP_REQUIREMENT" \
+    "$APP_DIR" >/dev/null
 
 echo "Packaged $APP_DIR"

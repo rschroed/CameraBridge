@@ -69,6 +69,13 @@ Package the local menu bar app bundle with:
 apps/CameraBridgeApp/scripts/package-app.sh
 ```
 
+The local packaging script signs `CameraBridgeApp.app` and its bundled `camd`
+with stable identifier-based ad-hoc requirements so local TCC permission checks
+can survive rebuilds more predictably than plain cdhash-only ad-hoc signing.
+If your machine previously granted camera access to an older packaged build,
+re-request permission once after adopting the newer packaging flow so macOS can
+record the updated local code requirement.
+
 The packaged app bundle, including the bundled `camd` executable, is written to:
 
 ```text

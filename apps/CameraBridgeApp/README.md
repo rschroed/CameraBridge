@@ -30,6 +30,13 @@ Package a local `.app` bundle with:
 apps/CameraBridgeApp/scripts/package-app.sh
 ```
 
+The packaging script signs the app bundle and bundled `camd` with stable
+identifier-based ad-hoc requirements for local testing. That is intended to
+avoid the plain cdhash-only identity drift that can make macOS camera
+permission checks fall back to `not_determined` after a rebuild. If you granted
+camera access to an older locally packaged build before this signing flow was
+added, request access once again so TCC can record the newer requirement.
+
 This produces a menu bar app bundle that includes the `camd` executable:
 
 ```text
