@@ -32,8 +32,10 @@ The request and response contract for the full shipped client surface is
 covered by `swift test` in `tests/CameraBridgeClientSwiftTests`.
 
 `requestPermission()` no longer triggers a macOS prompt from `camd`. It returns
-the daemon's stored permission state with `prompted: false`, or surfaces the
+the daemon's live permission state with `prompted: false`, or surfaces the
 `409 invalid_state` response that tells callers to use `CameraBridgeApp` when
-permission is still `not_determined`.
+permission is still `not_determined`. The route remains available so local
+clients can programmatically check whether permission is now usable before
+camera actions.
 
 For the current repo-level setup and first capture flow, see [docs/quick-start.md](../../docs/quick-start.md).

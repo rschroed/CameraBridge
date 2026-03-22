@@ -200,6 +200,44 @@ func routerReturnsStoredPermissionRequestResultForAuthorizedRequest() {
 }
 
 @Test
+func routerReturnsStoredPermissionRequestResultForRestrictedRequest() {
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted)
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/permissions/request",
+            headers: ["Authorization": "Bearer test-token"]
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"restricted"}"#)
+    #expect(sessionController.currentCameraState().permissionState == .restricted)
+}
+
+@Test
+func routerReturnsStoredPermissionRequestResultForDeniedRequest() {
+    let sessionController = makeSessionController(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .denied)
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/permissions/request",
+            headers: ["Authorization": "Bearer test-token"]
+        )
+    )
+
+    #expect(response.statusCode == 200)
+    #expect(String(decoding: response.body, as: UTF8.self) == #"{"prompted":false,"status":"denied"}"#)
+    #expect(sessionController.currentCameraState().permissionState == .denied)
+}
+
+@Test
 func localHTTPServerReturnsStoredPermissionRequestResultForAuthorizedRequest() async throws {
     let port = try reserveEphemeralPort()
     let sessionController = makeSessionController(
@@ -222,6 +260,30 @@ func localHTTPServerReturnsStoredPermissionRequestResultForAuthorizedRequest() a
     #expect(httpResponse.statusCode == 200)
     #expect(String(decoding: data, as: UTF8.self) == #"{"prompted":false,"status":"denied"}"#)
     #expect(sessionController.currentCameraState().permissionState == .denied)
+}
+
+@Test
+func routerRejectsSessionStartWhenPermissionIsRestricted() {
+    let sessionController = makeSessionController(
+        state: CameraState(permissionState: .authorized, activeDeviceID: "camera-1"),
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .restricted)
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/start",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Camera permission is restricted"}}"#
+    )
+    #expect(sessionController.currentCameraState().permissionState == .restricted)
 }
 
 @Test

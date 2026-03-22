@@ -32,46 +32,46 @@ func serverConfigurationResolvedAuthTokenLoadsOrCreatesStoredTokenWhenMissing() 
     #expect(reloadedToken == createdToken)
 }
 
-@Test(arguments: [
-    (CameraBridgeStoredPermissionState.notDetermined, PermissionState.notDetermined),
-    (CameraBridgeStoredPermissionState.restricted, PermissionState.restricted),
-    (CameraBridgeStoredPermissionState.denied, PermissionState.denied),
-    (CameraBridgeStoredPermissionState.authorized, PermissionState.authorized),
-])
-func storedPermissionStatusProviderMapsStoredState(
-    storedState: CameraBridgeStoredPermissionState,
-    expectedState: PermissionState
-) throws {
-    let directoryURL = makeTemporaryDirectoryURL()
-    defer { try? FileManager.default.removeItem(at: directoryURL) }
-
-    let store = DefaultCameraBridgePermissionStateStore(baseDirectoryURL: directoryURL)
-    try store.savePermissionState(storedState)
-
-    let provider = StoredPermissionStatusProvider(permissionStateStore: store)
-
-    #expect(provider.currentPermissionState() == expectedState)
-}
-
 @Test
-func storedPermissionStatusProviderDefaultsToNotDeterminedWhenStoreIsMissing() {
-    let directoryURL = makeTemporaryDirectoryURL()
-    let store = DefaultCameraBridgePermissionStateStore(baseDirectoryURL: directoryURL)
-
-    let provider = StoredPermissionStatusProvider(permissionStateStore: store)
-
-    #expect(provider.currentPermissionState() == .notDetermined)
-}
-
-@Test
-func storedPermissionRequesterReturnsCurrentStoredPermissionWithoutPrompting() {
-    let requester = StoredPermissionRequester(
+func daemonNonPromptingPermissionRequesterReturnsCurrentLiveStateWithoutPrompting() {
+    let requester = DaemonNonPromptingPermissionRequester(
         permissionStatusProvider: FixedPermissionStatusProvider(state: .authorized)
     )
     let resultBox = PermissionRequestResultBox()
     requester.requestPermission { resultBox.result = $0 }
 
     #expect(resultBox.result == .init(status: .authorized, prompted: false))
+}
+
+@Test(arguments: PermissionState.allCases)
+func daemonNonPromptingPermissionRequesterPreservesPermissionStateMapping(_ state: PermissionState) {
+    let requester = DaemonNonPromptingPermissionRequester(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: state)
+    )
+    let resultBox = PermissionRequestResultBox()
+    requester.requestPermission { resultBox.result = $0 }
+
+    #expect(resultBox.result == .init(status: state, prompted: false))
+}
+
+@Test
+func daemonNonPromptingPermissionRequesterIgnoresStalePermissionStateFiles() throws {
+    let staleDirectoryURL = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString, isDirectory: true)
+    defer { try? FileManager.default.removeItem(at: staleDirectoryURL) }
+
+    try FileManager.default.createDirectory(at: staleDirectoryURL, withIntermediateDirectories: true)
+    let staleFileURL = staleDirectoryURL.appendingPathComponent("permission-state", isDirectory: false)
+    try Data("authorized".utf8).write(to: staleFileURL, options: .atomic)
+
+    let requester = DaemonNonPromptingPermissionRequester(
+        permissionStatusProvider: FixedPermissionStatusProvider(state: .denied)
+    )
+    let resultBox = PermissionRequestResultBox()
+    requester.requestPermission { resultBox.result = $0 }
+
+    #expect(resultBox.result == .init(status: .denied, prompted: false))
+    #expect(try String(contentsOf: staleFileURL, encoding: .utf8) == "authorized")
 }
 
 private func makeTemporaryDirectoryURL() -> URL {
