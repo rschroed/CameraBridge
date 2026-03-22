@@ -217,7 +217,25 @@ Fill this in during the manual run:
 - Result:
 - Notes:
 
-### Latest Recorded Run
+### Latest Recorded Downloaded-Artifact Run
+
+- Date: 2026-03-22
+- Release: `v0.1.0`
+- Machine: Mac17,3
+- macOS version: 26.3.1 (25D2128)
+- Camera device: Insta360 Link 2
+- Result: Passed
+- Notes:
+  - Local maintainer release run completed Developer ID signing, notarization with `Accepted`, stapling, and `stapler validate`
+  - The staged-path `spctl --type open` check returned `source=Insufficient Context`, which did not match the downloaded-artifact behavior and was recorded as follow-up issue `#124`
+  - The published `CameraBridgeApp-v0.1.0-macos.zip` artifact was downloaded from GitHub Releases and launched successfully via normal macOS user flow
+  - `GET /v1/permissions` returned `authorized`
+  - `GET /v1/devices` returned the expected connected cameras, including `Insta360 Link 2`
+  - `examples/python/capture_photo.py --device-id 0x1220002e1a4c04` completed successfully against the downloaded release artifact
+  - Capture artifact written to `~/Library/Application Support/CameraBridge/Captures/capture-20260322T230155103Z-dcb767fc-2105-4189-9fe4-4443e39b1b18.jpg`
+  - This run validated the downloaded notarized artifact path, but did not separately record checksum comparison or `/Applications` install as part of the same note set
+
+### Latest Recorded Repo-Local Run
 
 - Date: 2026-03-22
 - Machine: Mac17,3
