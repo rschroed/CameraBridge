@@ -40,6 +40,8 @@ onboarding path.
 - `Quit CameraBridge` stops the managed daemon before the app exits
 - if another healthy local CameraBridge service is already running, the app
   shows `Running (External)` and does not kill that service
+- local macOS clients can open `camerabridge://permission` to launch or focus
+  the app and surface the current onboarding or ready-state menu
 - the app surfaces the current base URL plus the token, log, and captures paths
   needed by local integrators
 
@@ -122,7 +124,9 @@ Use these docs as the source of truth for external adopters:
 `/Applications/CameraBridgeApp.app` is the supported user install target for
 the packaged flow. It is not the downstream runtime-discovery contract.
 External apps should rely on the localhost service and documented support-path
-artifacts at runtime.
+artifacts at runtime. When a local integration receives
+`next_step.kind = open_camera_bridge_app`, it can hand off to the packaged app
+with `open "camerabridge://permission"`.
 
 Package the local menu bar app bundle with:
 
@@ -137,15 +141,18 @@ If your machine previously granted camera access to an older packaged build,
 re-request permission once after adopting the newer packaging flow so macOS can
 record the updated local code requirement.
 
+By default the contributor-local app bundle is staged outside the repo at:
+
+```text
+/tmp/CameraBridgeApp-local/CameraBridgeApp.app
+```
+
+Override that location with `CAMERABRIDGE_LOCAL_APP_OUTPUT_DIR=/your/path` if
+needed.
+
 For published external releases, use the official maintainer-signed and
 maintainer-notarized GitHub Release artifact path instead of this local
 contributor packaging flow.
-
-The packaged app bundle, including the bundled `camd` executable, is written to:
-
-```text
-$(swift build --show-bin-path)/CameraBridgeApp.app
-```
 
 ## First Capture
 
@@ -159,6 +166,17 @@ The shortest successful path is:
 4. confirm `Permission: Authorized`
 5. use the base URL and token path shown in the app if you are integrating from another local client
 6. run the minimal Python example with a real device id from `GET /v1/devices`
+
+For local macOS integrations, the concrete handoff for
+`open_camera_bridge_app` is:
+
+```bash
+open "camerabridge://permission"
+```
+
+That handoff opens the app’s existing menu bar onboarding/status UI only. It
+does not auto-start `camd` and does not auto-trigger the camera permission
+prompt.
 
 The app shows the effective connection details in its menu. In the default
 packaged flow, those values are:

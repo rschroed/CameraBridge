@@ -14,6 +14,19 @@
     <string>CameraBridge</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleTypeRole</key>
+            <string>Viewer</string>
+            <key>CFBundleURLName</key>
+            <string>io.camerabridge.CameraBridgeApp.handoff</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>camerabridge</string>
+            </array>
+        </dict>
+    </array>
     <key>CFBundleShortVersionString</key>
     <string>0.1.0</string>
     <key>CFBundleVersion</key>

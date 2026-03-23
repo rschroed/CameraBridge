@@ -38,13 +38,13 @@ apps/CameraBridgeApp/scripts/package-app.sh
 Launch the packaged app:
 
 ```bash
-open "$(swift build --show-bin-path)/CameraBridgeApp.app"
+open "/tmp/CameraBridgeApp-local/CameraBridgeApp.app"
 ```
 
 You can also open the bundle directly from Finder at:
 
 ```text
-$(swift build --show-bin-path)/CameraBridgeApp.app
+/tmp/CameraBridgeApp-local/CameraBridgeApp.app
 ```
 
 ## Start The Service And Confirm Permission
@@ -116,6 +116,15 @@ returns `message: null` and `next_step: null`. When permission is still
   "status": "not_determined"
 }
 ```
+
+On macOS, a local client can turn that next step into a concrete handoff with:
+
+```bash
+open "camerabridge://permission"
+```
+
+That handoff opens the existing `CameraBridgeApp` menu bar UI only. It does not
+start the service or trigger the permission prompt automatically.
 
 The mutating endpoints use the bearer token shown in the app. In the default
 packaged flow:

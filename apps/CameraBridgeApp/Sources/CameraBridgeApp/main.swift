@@ -1,22 +1,51 @@
 import AppKit
+import Carbon
 
 let application = NSApplication.shared
 let delegate = MainActor.assumeIsolated {
-    CameraBridgeStatusBarDelegate()
+    let delegate = CameraBridgeStatusBarDelegate()
+    delegate.registerDeepLinkHandler()
+    return delegate
 }
 application.setActivationPolicy(.accessory)
 application.delegate = delegate
 application.run()
 
 @MainActor
-final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
-    private let model = CameraBridgeAppModel()
+final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, CameraBridgeAppStatusPresenting, CameraBridgeAppStatusMenuDriving {
+    private let model: CameraBridgeAppModel
+    private let statusMenu: NSMenu
+    private lazy var statusMenuPresenter = CameraBridgeAppStatusMenuPresenter(driver: self)
+    private lazy var deepLinkRouter = CameraBridgeAppDeepLinkRouter(
+        statusRefresher: model,
+        statusPresenter: self,
+        logger: { message in
+            print(message)
+        }
+    )
     private var statusItem: NSStatusItem?
     private var terminationRequested = false
+
+    override init() {
+        self.model = CameraBridgeAppModel()
+        self.statusMenu = NSMenu()
+        super.init()
+        statusMenu.delegate = self
+    }
+
+    func registerDeepLinkHandler() {
+        NSAppleEventManager.shared().setEventHandler(
+            self,
+            andSelector: #selector(handleGetURLEvent(_:withReplyEvent:)),
+            forEventClass: AEEventClass(kInternetEventClass),
+            andEventID: AEEventID(kAEGetURL)
+        )
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "CameraBridge"
+        statusItem.menu = statusMenu
         self.statusItem = statusItem
 
         model.onChange = { [weak self] in
@@ -25,6 +54,7 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
 
         reloadMenu()
         model.start()
+        statusMenuPresenter.statusMenuPresentationDidBecomeAvailable()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -64,13 +94,59 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
         NSApp.terminate(sender)
     }
 
-    private func reloadMenu() {
-        statusItem?.menu = makeMenu()
+    func menuWillOpen(_ menu: NSMenu) {
+        guard menu === statusMenu else {
+            return
+        }
+
+        statusMenuPresenter.statusMenuWillOpen()
     }
 
-    private func makeMenu() -> NSMenu {
-        let menu = NSMenu()
+    func menuDidClose(_ menu: NSMenu) {
+        guard menu === statusMenu else {
+            return
+        }
 
+        statusMenuPresenter.statusMenuDidClose()
+    }
+
+    func presentStatusMenuForDeepLink() {
+        reloadMenu()
+        statusMenuPresenter.presentStatusMenu()
+    }
+
+    var canPresentStatusMenu: Bool {
+        statusItem?.button != nil
+    }
+
+    func activateAppForStatusMenu() {
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func openStatusMenu() {
+        statusItem?.button?.performClick(nil)
+    }
+
+    @objc
+    private func handleGetURLEvent(
+        _ event: NSAppleEventDescriptor,
+        withReplyEvent replyEvent: NSAppleEventDescriptor
+    ) {
+        guard let urlString = event.paramDescriptor(forKeyword: AEKeyword(keyDirectObject))?.stringValue else {
+            return
+        }
+
+        Task { @MainActor in
+            _ = await deepLinkRouter.handle(urlString)
+        }
+    }
+
+    private func reloadMenu() {
+        statusMenu.removeAllItems()
+        populateMenu(statusMenu)
+    }
+
+    private func populateMenu(_ menu: NSMenu) {
         menu.addItem(disabledItem(title: "CameraBridge"))
         menu.addItem(disabledItem(title: model.statusSummaryTitle))
         menu.addItem(.separator())
@@ -128,8 +204,6 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate {
         )
         quitItem.target = self
         menu.addItem(quitItem)
-
-        return menu
     }
 
     private func disabledItem(title: String) -> NSMenuItem {
