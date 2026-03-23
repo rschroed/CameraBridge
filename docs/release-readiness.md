@@ -63,7 +63,7 @@ store the newer identifier-based local requirement for `CameraBridgeApp.app`.
 2. Launch the packaged app:
 
 ```bash
-open "$(swift build --show-bin-path)/CameraBridgeApp.app"
+open "/tmp/CameraBridgeApp-local/CameraBridgeApp.app"
 ```
 
 Expected checkpoints:
@@ -72,6 +72,25 @@ Expected checkpoints:
 - the initial state reports the service as stopped
 - `Start CameraBridge Service` is available
 - developer info rows are visible even before capture
+
+2a. Verify the custom URL handoff:
+
+```bash
+open "camerabridge://permission"
+```
+
+Expected checkpoints:
+
+- if the app is already running, the status menu stays visible or becomes visible
+- the handoff does not auto-start `camd`
+- the handoff does not auto-trigger the camera permission prompt
+
+Quit the app once and repeat the same command.
+
+Expected checkpoints:
+
+- the app relaunches successfully from the custom URL
+- the status menu becomes visible after launch
 
 3. Start the service from the menu bar app.
 
@@ -191,6 +210,8 @@ release:
 - [ ] Gatekeeper accepted the notarized app
 - [ ] Installed app bundle metadata matched the release tag core version
 - [ ] Packaged `CameraBridgeApp.app` launched successfully
+- [ ] `open "camerabridge://permission"` launched or focused the app successfully
+- [ ] The custom URL handoff surfaced the menu without auto-starting the daemon
 - [ ] `camd` started from the app and reported healthy on `127.0.0.1:8731`
 - [ ] Auth token file existed at `~/Library/Application Support/CameraBridge/auth-token`
 - [ ] App surfaced base URL, token path, log path, and captures path

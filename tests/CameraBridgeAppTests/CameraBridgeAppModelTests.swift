@@ -267,6 +267,8 @@ private final class FakeServiceController: CameraBridgeServiceControlling {
     var state: CameraBridgeManagedServiceState
     var startError: Error?
     var stopError: Error?
+    private(set) var startCount = 0
+    private(set) var stopCount = 0
     private var startContinuation: CheckedContinuation<Void, Never>?
     private var stopContinuation: CheckedContinuation<Void, Never>?
 
@@ -275,6 +277,8 @@ private final class FakeServiceController: CameraBridgeServiceControlling {
     }
 
     func startIfNeeded() async throws {
+        startCount += 1
+
         if let startError {
             throw startError
         }
@@ -285,6 +289,8 @@ private final class FakeServiceController: CameraBridgeServiceControlling {
     }
 
     func stopIfManaged() async throws {
+        stopCount += 1
+
         if let stopError {
             throw stopError
         }

@@ -11,6 +11,7 @@ The app remains a thin client of the localhost CameraBridge service. Its menu ba
 - starting the bundled `camd` service
 - stopping the bundled `camd` service when this app owns that process
 - requesting camera access directly from the app process
+- responding to `camerabridge://permission` by surfacing the existing onboarding or status menu
 - surfacing base URL, token path, log path, and captures path for local integrators
 - quitting the app
 
@@ -49,13 +50,16 @@ added, request access once again so TCC can record the newer requirement.
 This produces a menu bar app bundle that includes the `camd` executable:
 
 ```text
-$(swift build --show-bin-path)/CameraBridgeApp.app
+/tmp/CameraBridgeApp-local/CameraBridgeApp.app
 ```
+
+Override that output location with `CAMERABRIDGE_LOCAL_APP_OUTPUT_DIR=/your/path`
+if you need a different local staging directory.
 
 Launch the packaged app from Finder or with:
 
 ```bash
-open "$(swift build --show-bin-path)/CameraBridgeApp.app"
+open "/tmp/CameraBridgeApp-local/CameraBridgeApp.app"
 ```
 
 When the app starts the bundled service, `camd` loads or creates the local bearer token at:
@@ -87,12 +91,31 @@ For the supported packaged flow, external apps should rely on the localhost
 service and support-path artifacts above at runtime. They should not depend on
 hardcoded app-bundle path discovery.
 
+## Custom URL Handoff
+
+`CameraBridgeApp` registers one supported custom URL for local macOS handoff:
+
+```text
+camerabridge://permission
+```
+
+Use it when a local client needs to satisfy the API guidance
+`next_step.kind = open_camera_bridge_app`.
+
+Expected behavior:
+
+- launching the URL opens or focuses `CameraBridgeApp`
+- the existing menu bar onboarding/status UI becomes visible
+- no daemon auto-start occurs
+- no camera permission prompt is triggered automatically
+- unsupported URLs are ignored safely
+
 ## Manual Verification
 
 Use the packaged app bundle for manual verification:
 
 1. Run `apps/CameraBridgeApp/scripts/package-app.sh`.
-2. Launch `CameraBridgeApp.app` from Finder or with `open "$(swift build --show-bin-path)/CameraBridgeApp.app"`.
+2. Launch `CameraBridgeApp.app` from Finder or with `open "/tmp/CameraBridgeApp-local/CameraBridgeApp.app"`.
 3. Confirm the menu shows:
    - a clear service status row
    - a clear permission status row
@@ -105,5 +128,7 @@ Use the packaged app bundle for manual verification:
 8. Confirm `Stop CameraBridge Service` returns the menu to the stopped state.
 9. Confirm quitting the app stops the managed daemon before exit.
 10. If service launch or permission request fails, confirm the last error row appears with readable wording.
+11. Quit the app, run `open "camerabridge://permission"`, and confirm the app relaunches with the menu visible.
+12. With the app already running and the menu open, run `open "camerabridge://permission"` again and confirm the menu stays visible without starting the service or prompting for permission.
 
 Capture screenshots of the refined menu states when practical for PR notes.
