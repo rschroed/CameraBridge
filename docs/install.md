@@ -29,7 +29,12 @@ shasum -a 256 CameraBridgeApp-v0.x.y-macos.zip
 cat CameraBridgeApp-v0.x.y-macos.zip.sha256
 ```
 
-The output lines should match exactly.
+Compare the SHA-256 digest values. The hexadecimal digest should match before
+you install the app.
+
+For the published `v0.1.1` release specifically, the `.sha256` file still
+contains the original build-path filename rather than the downloaded asset
+filename. Treat the digest as authoritative for that release.
 
 3. Unzip the archive.
 4. Move `CameraBridgeApp.app` into `/Applications/`.
@@ -51,6 +56,13 @@ In the supported packaged flow:
 
 External apps should treat CameraBridge as an external local service that may
 require the user to launch the app first.
+
+If a local macOS client receives `next_step.kind = open_camera_bridge_app`, it
+can hand off the user to the installed app with:
+
+```bash
+open "camerabridge://permission"
+```
 
 ## Upgrade
 
