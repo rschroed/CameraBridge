@@ -241,6 +241,21 @@ Fill this in during the manual run:
 ### Latest Recorded Downloaded-Artifact Run
 
 - Date: 2026-03-22
+- Release: `v0.1.1`
+- Machine: Mac17,3
+- macOS version: 26.3.1 (25D2128)
+- Camera device: Not exercised in this downloaded-artifact validation run
+- Result: Partial
+- Notes:
+  - Local maintainer release run completed Developer ID signing, notarization with `Accepted`, stapling, and `stapler validate`
+  - The staged-path `spctl --type open` check returned `source=Insufficient Context`, which remained advisory and did not contradict the downloaded-artifact validation
+  - The published `CameraBridgeApp-v0.1.1-macos.zip` artifact was downloaded from GitHub Releases and its SHA-256 digest matched `99574e2d81c05140eceb7bba979d6f01b86c3d78307ccb39bfb86b1d9960678b`
+  - The downloaded app passed `codesign --verify` and `xcrun stapler validate`
+  - The downloaded app bundle was installed to `/Applications`, reported `CFBundleShortVersionString=0.1.1`, launched successfully, and responded to `open 'camerabridge://permission'`
+  - The published `.sha256` file still contained the build-path filename rather than the release-asset filename, and that script behavior was corrected after publication for future releases
+  - A full real-camera packaged-flow smoke test from the downloaded `v0.1.1` artifact still needs to be recorded separately
+
+- Date: 2026-03-22
 - Release: `v0.1.0`
 - Machine: Mac17,3
 - macOS version: 26.3.1 (25D2128)
