@@ -39,6 +39,8 @@ management.
 - if permission is still undecided, downstream apps should expect the guided
   `POST /v1/permissions/request` response and direct the user to
   `CameraBridgeApp`
+- local macOS clients may satisfy that user-facing handoff with
+  `camerabridge://permission` as a convenience path to the installed app
 
 ## Packaged Flow Assumptions
 
@@ -56,4 +58,6 @@ guidance, support, and manual verification.
 That path is not the downstream runtime compatibility guarantee. Downstream
 code should not hardcode the bundle path as a discovery mechanism. If an
 integrating app wants to help the user find or launch CameraBridge, it should
-do so as a UX convenience rather than as part of the runtime contract.
+do so as a UX convenience rather than as part of the runtime contract. The
+supported convenience handoff for local macOS integrations is
+`camerabridge://permission`.

@@ -6,7 +6,7 @@
     <title>CameraBridge | Local macOS camera service over localhost</title>
     <meta
       name="description"
-      content="CameraBridge is a local macOS camera service with a small, versioned localhost API for apps, scripts, and local software."
+      content="CameraBridge is a signed macOS menu bar app and local camera service with a small, versioned localhost API for apps, scripts, and local software."
     />
     <meta
       property="og:title"
@@ -14,7 +14,7 @@
     />
     <meta
       property="og:description"
-      content="A narrow local macOS camera service with explicit permissions, device discovery, session control, and still capture."
+      content="A narrow local macOS camera service with a signed app, explicit permissions, device discovery, session control, and still capture."
     />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://rschroed.github.io/CameraBridge/" />
@@ -25,7 +25,7 @@
     />
     <meta
       name="twitter:description"
-      content="A local macOS camera service for apps and scripts without embedding AVFoundation."
+      content="A signed local macOS camera service for apps and scripts without embedding AVFoundation."
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
@@ -45,9 +45,10 @@
           <p class="eyebrow">Local-only macOS camera service</p>
           <h1>Local camera access on macOS, through one narrow localhost boundary.</h1>
           <p class="hero-copy">
-            CameraBridge exposes AVFoundation through a small, versioned local API
-            so apps, scripts, and local software can use the camera through one
-            deliberate macOS service instead of embedding native glue repeatedly.
+            CameraBridge ships as a signed menu bar app plus a small, versioned
+            localhost API so apps, scripts, and local software can rely on one
+            deliberate macOS camera service instead of embedding native glue
+            repeatedly.
           </p>
           <div class="hero-actions">
             <a class="button button-primary" href="https://github.com/rschroed/CameraBridge/releases"
@@ -61,7 +62,8 @@
             >
           </div>
           <ul class="hero-meta" aria-label="Highlights">
-            <li>Explicit camera permission state</li>
+            <li>Signed packaged app for install, status, and service control</li>
+            <li>Explicit camera permission state and recovery path</li>
             <li>Localhost API for device and session control</li>
             <li>Still photo capture with local artifact metadata</li>
           </ul>
@@ -121,9 +123,10 @@
             </p>
           </div>
           <p class="section-copy">
-            Clients speak HTTP. CameraBridge owns native camera interaction. macOS
-            still owns permissions. The result is a predictable local boundary
-            instead of app-specific camera code.
+            Clients speak HTTP. CameraBridge owns native camera interaction and
+            the menu bar app owns onboarding and status visibility. macOS still
+            owns permissions. The result is a predictable local boundary instead
+            of app-specific camera code.
           </p>
         </section>
 
@@ -146,8 +149,9 @@
             <article class="scope-block">
               <p class="item-label">Local product shape</p>
               <ul>
-                <li><code>camd</code> daemon and CLI entrypoint</li>
-                <li>Menu bar app for onboarding and status</li>
+                <li>Signed <code>CameraBridgeApp</code> bundle for install and lifecycle</li>
+                <li>Bundled <code>camd</code> daemon managed by the app</li>
+                <li>Menu bar onboarding, status, and permission recovery</li>
                 <li>Single active camera session model</li>
                 <li>Implicit ownership via session start in v1</li>
                 <li>Structured logs and local artifact metadata</li>
@@ -219,9 +223,11 @@ curl -s -X POST http://127.0.0.1:8731/v1/capture/photo \
           <p class="annotation">Readable by humans. Legible to agents.</p>
           <p class="section-copy">
             The shipped path is intentionally small but real: discover a device,
-            use the local bearer token surfaced by the app, start the session,
-            and capture a still image. For a minimal end-to-end helper, the repo
-            also ships a Python first-capture example.
+            use the local bearer token surfaced by the installed app, start the
+            session, and capture a still image. If permission needs user
+            attention, local macOS clients can hand off to the app through the
+            documented `camerabridge://permission` flow. For a minimal end-to-end
+            helper, the repo also ships a Python first-capture example.
           </p>
         </section>
 
@@ -231,9 +237,9 @@ curl -s -X POST http://127.0.0.1:8731/v1/capture/photo \
             <h2 id="cta-title">Start with the packaged flow.</h2>
           </div>
           <p class="section-copy">
-            External adopters should install the signed app bundle first, then
-            use the install guide for setup and the API contract when wiring a
-            local client against the current v1 surface.
+            External adopters should install the signed app bundle first, use
+            the menu bar app for service start and permission recovery, and then
+            wire local clients against the current v1 localhost API surface.
           </p>
           <div class="cta-actions">
             <a class="button button-primary" href="https://github.com/rschroed/CameraBridge/releases"
