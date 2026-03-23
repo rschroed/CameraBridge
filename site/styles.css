@@ -337,14 +337,24 @@ code {
 }
 
 .example-block {
-  overflow-x: auto;
   margin-top: var(--space-2);
   padding: var(--space-5);
   border: 1px solid var(--rule);
   background: #fcfcfc;
 }
 
+.example-segment + .example-segment {
+  margin-top: var(--space-5);
+  padding-top: var(--space-5);
+  border-top: 1px solid var(--rule);
+}
+
+.example-segment .item-label {
+  margin-bottom: var(--space-3);
+}
+
 .example-block pre {
+  overflow-x: auto;
   min-width: max-content;
   font-size: 12px;
   line-height: 1.65;
@@ -353,6 +363,20 @@ code {
 
 .section-closing .cta-actions {
   margin-top: var(--space-6);
+}
+
+.supporting-link {
+  margin-top: var(--space-4);
+  color: var(--text-muted);
+}
+
+.supporting-link a {
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.supporting-link a:hover,
+.supporting-link a:focus-visible {
+  border-bottom-color: var(--accent);
 }
 
 @media (min-width: 880px) {
@@ -418,5 +442,10 @@ code {
   .hero-actions,
   .cta-actions {
     flex-direction: column;
+  }
+
+  .example-segment + .example-segment {
+    margin-top: var(--space-4);
+    padding-top: var(--space-4);
   }
 }

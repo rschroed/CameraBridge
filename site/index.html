@@ -50,11 +50,14 @@
             deliberate macOS service instead of embedding native glue repeatedly.
           </p>
           <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/rschroed/CameraBridge"
-              >View on GitHub</a
+            <a class="button button-primary" href="https://github.com/rschroed/CameraBridge/releases"
+              >Download CameraBridgeApp</a
             >
-            <a class="button" href="https://github.com/rschroed/CameraBridge/blob/main/README.md"
-              >Read the README</a
+            <a class="button" href="https://github.com/rschroed/CameraBridge/blob/main/docs/install.md"
+              >Install Guide</a
+            >
+            <a class="button" href="https://github.com/rschroed/CameraBridge"
+              >View on GitHub</a
             >
           </div>
           <ul class="hero-meta" aria-label="Highlights">
@@ -186,50 +189,66 @@
         <section class="section" id="example" aria-labelledby="example-title">
           <div class="section-heading">
             <p class="section-label">Quick example</p>
-            <h2 id="example-title">Health and permissions over local HTTP.</h2>
+            <h2 id="example-title">From device inventory to a still capture.</h2>
           </div>
           <div class="example-block">
-            <pre><code>curl http://127.0.0.1:PORT/health
+            <div class="example-segment">
+              <p class="item-label">Read-only discovery</p>
+              <pre><code>curl -s http://127.0.0.1:8731/v1/devices</code></pre>
+            </div>
+            <div class="example-segment">
+              <p class="item-label">Token-protected capture flow</p>
+              <pre><code>TOKEN="$(cat ~/Library/Application\ Support/CameraBridge/auth-token)"
 
-{
-  "status": "ok"
-}
+curl -s -X POST http://127.0.0.1:8731/v1/session/select-device \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"device_id":"YOUR_DEVICE_ID","owner_id":"client-1"}'
 
-curl http://127.0.0.1:PORT/v1/permissions
+curl -s -X POST http://127.0.0.1:8731/v1/session/start \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"client-1"}'
 
-{
-  "status": "not_determined"
-}</code></pre>
+curl -s -X POST http://127.0.0.1:8731/v1/capture/photo \
+  -H "Authorization: Bearer $TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"owner_id":"client-1"}'</code></pre>
+            </div>
           </div>
           <p class="annotation">Readable by humans. Legible to agents.</p>
           <p class="section-copy">
-            The shipped v1 surface stays intentionally small: health, permission
-            visibility, device discovery, session control, and still capture.
-            Mutating routes use bearer-token protection, with ownership
-            established implicitly when a client starts the session.
+            The shipped path is intentionally small but real: discover a device,
+            use the local bearer token surfaced by the app, start the session,
+            and capture a still image. For a minimal end-to-end helper, the repo
+            also ships a Python first-capture example.
           </p>
         </section>
 
         <section class="section section-closing" aria-labelledby="cta-title">
           <div class="section-heading">
-            <p class="section-label">Get started</p>
-            <h2 id="cta-title">Use the repo as the source of truth.</h2>
+            <p class="section-label">Next step</p>
+            <h2 id="cta-title">Start with the packaged flow.</h2>
           </div>
           <p class="section-copy">
-            Read the docs, track current implementation status, and follow the
-            published contract for the present CameraBridge v1 slice.
+            External adopters should install the signed app bundle first, then
+            use the install guide for setup and the API contract when wiring a
+            local client against the current v1 surface.
           </p>
           <div class="cta-actions">
-            <a class="button button-primary" href="https://github.com/rschroed/CameraBridge"
-              >Open the GitHub repo</a
+            <a class="button button-primary" href="https://github.com/rschroed/CameraBridge/releases"
+              >Download CameraBridgeApp</a
+            >
+            <a class="button" href="https://github.com/rschroed/CameraBridge/blob/main/docs/install.md"
+              >Install Guide</a
             >
             <a class="button" href="https://github.com/rschroed/CameraBridge/blob/main/docs/api/v1.md"
               >API contract</a
             >
-            <a class="button" href="https://github.com/rschroed/CameraBridge/blob/main/docs/roadmap/v1.md"
-              >v1 roadmap</a
-            >
           </div>
+          <p class="supporting-link">
+            <a href="https://github.com/rschroed/CameraBridge">GitHub repo</a>
+          </p>
           <p class="annotation">
             Predictable enough for scripts. Civilized enough for people.
           </p>
