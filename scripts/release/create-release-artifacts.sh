@@ -75,6 +75,7 @@ APP_PATH="$STAGE_DIR/CameraBridgeApp.app"
 NOTARIZATION_ZIP="$OUTPUT_DIR/${ARTIFACT_PREFIX}-notarization.zip"
 RELEASE_ZIP="$OUTPUT_DIR/${ARTIFACT_PREFIX}.zip"
 CHECKSUM_FILE="$OUTPUT_DIR/${ARTIFACT_PREFIX}.zip.sha256"
+RELEASE_ZIP_NAME="$(basename "$RELEASE_ZIP")"
 
 mkdir -p "$STAGE_DIR"
 rm -f "$NOTARIZATION_ZIP" "$RELEASE_ZIP" "$CHECKSUM_FILE"
@@ -114,7 +115,10 @@ if [[ "$SIGNING_MODE" == "developer-id" && "$SKIP_NOTARIZATION" != "1" ]]; then
 fi
 
 ditto -c -k --keepParent "$APP_PATH" "$RELEASE_ZIP"
-shasum -a 256 "$RELEASE_ZIP" > "$CHECKSUM_FILE"
+(
+    cd "$OUTPUT_DIR"
+    shasum -a 256 "$RELEASE_ZIP_NAME"
+) > "$CHECKSUM_FILE"
 
 codesign --verify --strict --verbose=2 "$APP_PATH"
 
