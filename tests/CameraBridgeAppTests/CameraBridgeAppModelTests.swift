@@ -35,6 +35,7 @@ func stoppedServiceStateShowsLocalPermissionGuidanceAndDeveloperInfo() async {
     #expect(!model.canStopService)
     #expect(model.canRequestCameraAccess)
     #expect(model.developerBaseURL == "http://127.0.0.1:9100")
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: None")
 }
 
 @Test
@@ -42,6 +43,15 @@ func stoppedServiceStateShowsLocalPermissionGuidanceAndDeveloperInfo() async {
 func runningManagedServiceShowsReadyStateAndAllowsStop() async {
     let client = FakeCameraBridgeAppClient()
     await client.setServiceIsRunning(true)
+    await client.setSessionSnapshot(
+        .init(
+            state: .running,
+            activeDeviceID: "camera-1",
+            ownerID: "client-1",
+            lastError: nil
+        )
+    )
+    await client.setDevices([CameraBridgeDevice(id: "camera-1", name: "Built-in Camera", position: .front)])
     let permissionController = FakeCameraBridgeAppPermissionController(currentStatus: .authorized)
     let runtimeInfoStore = FakeRuntimeInfoStore(
         runtimeInfo: .init(
@@ -72,6 +82,7 @@ func runningManagedServiceShowsReadyStateAndAllowsStop() async {
     #expect(model.canStopService)
     #expect(model.developerBaseURL == "http://127.0.0.1:9101")
     #expect(model.developerTokenPath == "/tmp/auth-token")
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: Built-in Camera")
 }
 
 @Test
@@ -99,6 +110,94 @@ func runningExternalServiceShowsExternalStateAndDisablesStop() async {
         model.guidanceMessage ==
         "A local CameraBridge service is already running outside this app and camera access is available."
     )
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: None")
+}
+
+@Test
+@MainActor
+func stoppedSessionStillShowsResolvedSelectedDevice() async {
+    let client = FakeCameraBridgeAppClient()
+    await client.setServiceIsRunning(true)
+    await client.setSessionSnapshot(
+        .init(
+            state: .stopped,
+            activeDeviceID: "camera-2",
+            ownerID: nil,
+            lastError: nil
+        )
+    )
+    await client.setDevices([CameraBridgeDevice(id: "camera-2", name: "Desk Camera", position: .external)])
+    let model = CameraBridgeAppModel(
+        client: client,
+        runtimeConfigurationStore: FakeRuntimeConfigurationStore(configuration: .init()),
+        runtimeInfoStore: FakeRuntimeInfoStore(runtimeInfo: nil),
+        permissionController: FakeCameraBridgeAppPermissionController(currentStatus: .authorized),
+        serviceController: FakeServiceController(state: .runningExternal)
+    )
+
+    await model.refreshNow()
+
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: Desk Camera")
+}
+
+@Test
+@MainActor
+func missingSelectedDeviceShowsUnavailableStateWithPreservedID() async {
+    let client = FakeCameraBridgeAppClient()
+    await client.setServiceIsRunning(true)
+    await client.setSessionSnapshot(
+        .init(
+            state: .running,
+            activeDeviceID: "camera-missing",
+            ownerID: "client-1",
+            lastError: nil
+        )
+    )
+    await client.setDevices([CameraBridgeDevice(id: "camera-1", name: "Built-in Camera", position: .front)])
+    let model = CameraBridgeAppModel(
+        client: client,
+        runtimeConfigurationStore: FakeRuntimeConfigurationStore(configuration: .init()),
+        runtimeInfoStore: FakeRuntimeInfoStore(runtimeInfo: nil),
+        permissionController: FakeCameraBridgeAppPermissionController(currentStatus: .authorized),
+        serviceController: FakeServiceController(state: .runningManaged)
+    )
+
+    await model.refreshNow()
+
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: Unavailable (camera-missing)")
+}
+
+@Test
+@MainActor
+func refreshClearsSelectedDeviceWhenServiceBecomesStopped() async {
+    let client = FakeCameraBridgeAppClient()
+    await client.setServiceIsRunning(true)
+    await client.setSessionSnapshot(
+        .init(
+            state: .running,
+            activeDeviceID: "camera-1",
+            ownerID: "client-1",
+            lastError: nil
+        )
+    )
+    await client.setDevices([CameraBridgeDevice(id: "camera-1", name: "Built-in Camera", position: .front)])
+    let serviceController = FakeServiceController(state: .runningManaged)
+    let model = CameraBridgeAppModel(
+        client: client,
+        runtimeConfigurationStore: FakeRuntimeConfigurationStore(configuration: .init()),
+        runtimeInfoStore: FakeRuntimeInfoStore(runtimeInfo: nil),
+        permissionController: FakeCameraBridgeAppPermissionController(currentStatus: .authorized),
+        serviceController: serviceController
+    )
+
+    await model.refreshNow()
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: Built-in Camera")
+
+    await client.setServiceIsRunning(false)
+    serviceController.state = .stopped
+    await model.refreshNow()
+
+    #expect(model.selectedDeviceStatusTitle == "Selected Camera: None")
 }
 
 @Test
@@ -203,13 +302,36 @@ func permissionRequestDisablesActionWhilePromptIsInFlightAndSyncsAuthorizedState
 
 private actor FakeCameraBridgeAppClient: CameraBridgeAppClient {
     private var isRunning = false
+    private var devicesList: [CameraBridgeDevice] = []
+    private var sessionSnapshot = CameraBridgeSessionSnapshot(
+        state: .stopped,
+        activeDeviceID: nil,
+        ownerID: nil,
+        lastError: nil
+    )
 
     func setServiceIsRunning(_ value: Bool) {
         isRunning = value
     }
 
+    func setDevices(_ value: [CameraBridgeDevice]) {
+        devicesList = value
+    }
+
+    func setSessionSnapshot(_ value: CameraBridgeSessionSnapshot) {
+        sessionSnapshot = value
+    }
+
     func serviceIsRunning() async -> Bool {
         isRunning
+    }
+
+    func devices() async throws -> [CameraBridgeDevice] {
+        devicesList
+    }
+
+    func sessionState() async throws -> CameraBridgeSessionSnapshot {
+        sessionSnapshot
     }
 }
 

@@ -144,6 +144,14 @@ private actor DeepLinkTestCameraBridgeAppClient: CameraBridgeAppClient {
     func serviceIsRunning() async -> Bool {
         isRunning
     }
+
+    func devices() async throws -> [CameraBridgeDevice] {
+        []
+    }
+
+    func sessionState() async throws -> CameraBridgeSessionSnapshot {
+        .init(state: .stopped, activeDeviceID: nil, ownerID: nil, lastError: nil)
+    }
 }
 
 private struct DeepLinkTestRuntimeConfigurationStore: CameraBridgeRuntimeConfigurationReading {
