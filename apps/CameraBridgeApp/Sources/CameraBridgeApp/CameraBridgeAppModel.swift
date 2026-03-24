@@ -78,6 +78,23 @@ final class CameraBridgeAppModel {
         }
     }
 
+    private enum SelectedDeviceDisplay: Equatable {
+        case none
+        case available(String)
+        case unavailable(String)
+
+        var title: String {
+            switch self {
+            case .none:
+                return "Selected Camera: None"
+            case .available(let name):
+                return "Selected Camera: \(name)"
+            case .unavailable(let deviceID):
+                return "Selected Camera: Unavailable (\(deviceID))"
+            }
+        }
+    }
+
     private struct DeveloperInfo: Equatable {
         var baseURL: String
         var tokenPath: String
@@ -195,11 +212,16 @@ final class CameraBridgeAppModel {
         developerInfo.capturesPath
     }
 
+    var selectedDeviceStatusTitle: String {
+        selectedDeviceDisplay.title
+    }
+
     private var serviceStatus: ServiceStatus = .stopped
     private var permissionDisplay: PermissionDisplay = .unavailable
     private var lastError: String?
     private var isRequestInFlight = false
     private var refreshTimer: Timer?
+    private var selectedDeviceDisplay: SelectedDeviceDisplay = .none
     private var developerInfo = DeveloperInfo(
         baseURL: "Unavailable",
         tokenPath: "Unavailable",
@@ -303,7 +325,8 @@ final class CameraBridgeAppModel {
 
     private func refreshState() async {
         let permissionStatus = permissionController.currentPermissionStatus()
-        switch await serviceController.currentManagementState() {
+        let managementState = await serviceController.currentManagementState()
+        switch managementState {
         case .stopped:
             serviceStatus = .stopped
         case .runningManaged:
@@ -312,9 +335,31 @@ final class CameraBridgeAppModel {
             serviceStatus = .runningExternal
         }
         permissionDisplay = .init(permissionStatus: permissionStatus)
+        selectedDeviceDisplay = await loadSelectedDeviceDisplay(for: managementState)
         developerInfo = loadDeveloperInfo()
         lastError = nil
         publishChange()
+    }
+
+    private func loadSelectedDeviceDisplay(
+        for managementState: CameraBridgeManagedServiceState
+    ) async -> SelectedDeviceDisplay {
+        guard managementState != .stopped else {
+            return .none
+        }
+
+        guard let sessionSnapshot = try? await client.sessionState(),
+              let activeDeviceID = sessionSnapshot.activeDeviceID
+        else {
+            return .none
+        }
+
+        let devices = (try? await client.devices()) ?? []
+        if let device = devices.first(where: { $0.id == activeDeviceID }) {
+            return .available(device.name)
+        }
+
+        return .unavailable(activeDeviceID)
     }
 
     private func performStartService() async {
@@ -447,6 +492,8 @@ extension DefaultCameraBridgeRuntimeInfoStore: CameraBridgeRuntimeInfoReading {}
 
 protocol CameraBridgeAppClient {
     func serviceIsRunning() async -> Bool
+    func devices() async throws -> [CameraBridgeDevice]
+    func sessionState() async throws -> CameraBridgeSessionSnapshot
 }
 
 extension CameraBridgeClient: CameraBridgeAppClient {}

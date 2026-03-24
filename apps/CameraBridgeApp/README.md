@@ -119,6 +119,7 @@ Use the packaged app bundle for manual verification:
 3. Confirm the menu shows:
    - a clear service status row
    - a clear permission status row
+   - a selected camera row that shows `None`, the resolved device name, or `Unavailable (<device id>)`
    - a guidance row describing the next onboarding step
    - developer-info rows for base URL, token path, log path, and captures path
 4. With permission not yet granted, confirm `Request Camera Access` is enabled even before the service is started.
@@ -126,9 +127,11 @@ Use the packaged app bundle for manual verification:
 6. Confirm that clicking `Request Camera Access` prompts from `CameraBridgeApp`.
 7. After granting permission, confirm the menu reports that CameraBridge is ready.
 8. Confirm `Stop CameraBridge Service` returns the menu to the stopped state.
-9. Confirm quitting the app stops the managed daemon before exit.
-10. If service launch or permission request fails, confirm the last error row appears with readable wording.
-11. Quit the app, run `open "camerabridge://permission"`, and confirm the app relaunches with the menu visible.
-12. With the app already running and the menu open, run `open "camerabridge://permission"` again and confirm the menu stays visible without starting the service or prompting for permission.
+9. After selecting a device through the API, confirm the menu shows the selected device name while the service remains reachable, even if the session itself is stopped.
+10. If the selected device becomes unavailable, confirm the menu shows `Unavailable (<device id>)`.
+11. Confirm quitting the app stops the managed daemon before exit.
+12. If service launch or permission request fails, confirm the last error row appears with readable wording.
+13. Quit the app, run `open "camerabridge://permission"`, and confirm the app relaunches with the menu visible.
+14. With the app already running and the menu open, run `open "camerabridge://permission"` again and confirm the menu stays visible without starting the service or prompting for permission.
 
 Capture screenshots of the refined menu states when practical for PR notes.

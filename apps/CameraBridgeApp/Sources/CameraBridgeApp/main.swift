@@ -153,6 +153,7 @@ final class CameraBridgeStatusBarDelegate: NSObject, NSApplicationDelegate, NSMe
 
         menu.addItem(disabledItem(title: "Service: \(model.serviceStatusTitle)"))
         menu.addItem(disabledItem(title: "Permission: \(model.permissionStatusTitle)"))
+        menu.addItem(disabledItem(title: model.selectedDeviceStatusTitle))
         menu.addItem(disabledItem(title: model.guidanceMessage))
 
         if let lastError = model.lastErrorMessage {
