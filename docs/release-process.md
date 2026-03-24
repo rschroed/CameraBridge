@@ -43,11 +43,29 @@ git status --short
 v0.x.y
 ```
 
-3. Export the local signing and notarization environment expected by the
+3. Store the App Store Connect key in the local Keychain once on the trusted
+   maintainer Mac:
+
+```bash
+xcrun notarytool store-credentials camerabridge-notary \
+  --key "/path/to/AuthKey_XXXX.p8" \
+  --key-id "XXXXXXXXXX" \
+  --issuer "00000000-0000-0000-0000-000000000000"
+```
+
+4. Export the local signing and notarization environment expected by the
    artifact script:
 
 ```bash
-export CAMERABRIDGE_SIGNING_IDENTITY="Developer ID Application: Ryan Schroeder (8QU25M896L)"
+export CAMERABRIDGE_SIGNING_IDENTITY="Developer ID Application: Example Maintainer (TEAMID1234)"
+export CAMERABRIDGE_NOTARY_KEYCHAIN_PROFILE="camerabridge-notary"
+```
+
+The preferred flow keeps the notary private key in the maintainer's local
+Keychain rather than in the repository or shell history. If needed, the release
+script also supports the previous environment-variable fallback:
+
+```bash
 export CAMERABRIDGE_NOTARY_KEY_ID="..."
 export CAMERABRIDGE_NOTARY_ISSUER_ID="..."
 export CAMERABRIDGE_NOTARY_PRIVATE_KEY="$(cat /path/to/AuthKey_XXXX.p8)"
@@ -57,7 +75,7 @@ These are the only maintainer-side release inputs required by the current
 scripts. No provisioning profiles, App Store packaging, or additional
 certificate types are part of the release flow.
 
-4. Build the official release artifacts locally:
+5. Build the official release artifacts locally:
 
 ```bash
 scripts/release/create-release-artifacts.sh --version v0.x.y --signing-mode developer-id
@@ -85,14 +103,14 @@ The script is responsible for:
 - zip creation
 - checksum generation
 
-5. Create and push the release tag:
+6. Create and push the release tag:
 
 ```bash
 git tag v0.x.y
 git push origin v0.x.y
 ```
 
-6. Create or update the GitHub Release and upload the official artifacts:
+7. Create or update the GitHub Release and upload the official artifacts:
 
 ```bash
 gh release create v0.x.y \
@@ -110,7 +128,7 @@ gh release upload v0.x.y \
   --clobber
 ```
 
-7. Validate the distributed artifact, not the local app bundle:
+8. Validate the distributed artifact, not the local app bundle:
 
 - download the uploaded zip and checksum from GitHub Releases
 - verify the checksum against the downloaded zip

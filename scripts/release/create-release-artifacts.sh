@@ -9,6 +9,7 @@ VERSION="${CAMERABRIDGE_VERSION:-}"
 OUTPUT_DIR="${CAMERABRIDGE_RELEASE_OUTPUT_DIR:-$ROOT_DIR/dist}"
 SIGNING_MODE="${CAMERABRIDGE_RELEASE_SIGNING_MODE:-developer-id}"
 SKIP_NOTARIZATION="${CAMERABRIDGE_SKIP_NOTARIZATION:-0}"
+NOTARY_KEYCHAIN_PROFILE="${CAMERABRIDGE_NOTARY_KEYCHAIN_PROFILE:-}"
 
 usage() {
     cat <<'EOF'
@@ -87,20 +88,27 @@ rm -f "$NOTARIZATION_ZIP" "$RELEASE_ZIP" "$CHECKSUM_FILE"
     --bundle-version "$BUNDLE_VERSION"
 
 if [[ "$SIGNING_MODE" == "developer-id" && "$SKIP_NOTARIZATION" != "1" ]]; then
-    : "${CAMERABRIDGE_NOTARY_KEY_ID:?CAMERABRIDGE_NOTARY_KEY_ID is required for notarization}"
-    : "${CAMERABRIDGE_NOTARY_ISSUER_ID:?CAMERABRIDGE_NOTARY_ISSUER_ID is required for notarization}"
-    : "${CAMERABRIDGE_NOTARY_PRIVATE_KEY:?CAMERABRIDGE_NOTARY_PRIVATE_KEY is required for notarization}"
-
-    PRIVATE_KEY_FILE="$(mktemp "$OUTPUT_DIR/notary-key.XXXXXX.p8")"
-    trap 'rm -f "$PRIVATE_KEY_FILE"' EXIT
-    printf '%s' "$CAMERABRIDGE_NOTARY_PRIVATE_KEY" > "$PRIVATE_KEY_FILE"
-
     ditto -c -k --keepParent "$APP_PATH" "$NOTARIZATION_ZIP"
-    xcrun notarytool submit "$NOTARIZATION_ZIP" \
-        --key "$PRIVATE_KEY_FILE" \
-        --key-id "$CAMERABRIDGE_NOTARY_KEY_ID" \
-        --issuer "$CAMERABRIDGE_NOTARY_ISSUER_ID" \
-        --wait
+
+    if [[ -n "$NOTARY_KEYCHAIN_PROFILE" ]]; then
+        xcrun notarytool submit "$NOTARIZATION_ZIP" \
+            --keychain-profile "$NOTARY_KEYCHAIN_PROFILE" \
+            --wait
+    else
+        : "${CAMERABRIDGE_NOTARY_KEY_ID:?CAMERABRIDGE_NOTARY_KEY_ID is required for notarization when CAMERABRIDGE_NOTARY_KEYCHAIN_PROFILE is unset}"
+        : "${CAMERABRIDGE_NOTARY_ISSUER_ID:?CAMERABRIDGE_NOTARY_ISSUER_ID is required for notarization when CAMERABRIDGE_NOTARY_KEYCHAIN_PROFILE is unset}"
+        : "${CAMERABRIDGE_NOTARY_PRIVATE_KEY:?CAMERABRIDGE_NOTARY_PRIVATE_KEY is required for notarization when CAMERABRIDGE_NOTARY_KEYCHAIN_PROFILE is unset}"
+
+        PRIVATE_KEY_FILE="$(mktemp "$OUTPUT_DIR/notary-key.XXXXXX.p8")"
+        trap 'rm -f "$PRIVATE_KEY_FILE"' EXIT
+        printf '%s' "$CAMERABRIDGE_NOTARY_PRIVATE_KEY" > "$PRIVATE_KEY_FILE"
+
+        xcrun notarytool submit "$NOTARIZATION_ZIP" \
+            --key "$PRIVATE_KEY_FILE" \
+            --key-id "$CAMERABRIDGE_NOTARY_KEY_ID" \
+            --issuer "$CAMERABRIDGE_NOTARY_ISSUER_ID" \
+            --wait
+    fi
 
     xcrun stapler staple "$APP_PATH"
     xcrun stapler validate "$APP_PATH"
