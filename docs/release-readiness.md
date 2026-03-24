@@ -7,6 +7,7 @@ This validation requires:
 
 - a real Mac
 - a real local camera device
+- at least one recorded run on a built-in Apple camera before release signoff
 - the packaged `CameraBridgeApp.app` bundle
 
 It is intentionally manual. CI should continue to avoid hardware dependencies.
@@ -163,6 +164,7 @@ Expected checkpoints:
 - device selection succeeds
 - session start succeeds
 - still capture succeeds
+- the first captured JPEG is visibly usable on a built-in Apple camera and is not severely underexposed
 - session stop succeeds
 - the reported `local_path` exists on disk under `~/Library/Application Support/CameraBridge/Captures/`
 
@@ -199,6 +201,7 @@ release:
 
 - [ ] Machine and macOS version recorded
 - [ ] Camera device model or built-in camera noted
+- [ ] Built-in Apple camera first-capture flow recorded for this release
 - [ ] `swift build` passed
 - [ ] `swift test` passed
 - [ ] Published GitHub Release zip downloaded successfully
@@ -221,6 +224,7 @@ release:
 - [ ] Stale `permission-state` file had no effect on daemon permission responses
 - [ ] `GET /v1/devices` returned the expected camera
 - [ ] Python first-capture example completed successfully
+- [ ] Built-in Apple camera capture was visibly usable and not severely underexposed
 - [ ] Capture artifact existed at the reported `local_path`
 - [ ] `GET /v1/session` returned `stopped` after cleanup
 - [ ] `Stop CameraBridge Service` returned the app to the stopped state
@@ -239,6 +243,8 @@ Fill this in during the manual run:
 - Notes:
 
 ### Latest Recorded Downloaded-Artifact Run
+
+The historical runs below predate issue `#141`. External-camera-only validation is no longer sufficient for release signoff; at least one built-in Apple camera run must also be recorded.
 
 - Date: 2026-03-22
 - Release: `v0.1.1`
