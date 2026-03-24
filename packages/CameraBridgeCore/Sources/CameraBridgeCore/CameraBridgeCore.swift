@@ -119,6 +119,7 @@ public protocol CameraPhotoCapturing: Sendable {
 
 public enum CameraDeviceSelectionError: Error, Sendable, Equatable {
     case ownershipConflict(currentOwnerID: String)
+    case sessionRunning
     case unavailableDevice(id: String)
 }
 
@@ -152,8 +153,10 @@ public enum CameraPhotoCaptureError: Error, Sendable, Equatable {
     case captureFailed(message: String)
 }
 
-public protocol CameraStillPhotoProducing: Sendable {
-    func capturePhotoData(deviceID: String) throws -> Data
+public protocol CameraStillSessionManaging: Sendable {
+    func start(deviceID: String) throws
+    func capturePhotoData() throws -> Data
+    func stop()
 }
 
 public protocol PhotoArtifactStoring: Sendable {
@@ -264,25 +267,51 @@ public struct DefaultPhotoArtifactStore: PhotoArtifactStoring {
     }
 }
 
-public struct UnimplementedStillPhotoProducer: CameraStillPhotoProducing {
+public final class UnimplementedStillSessionManager: CameraStillSessionManaging, @unchecked Sendable {
     public init() {}
 
-    public func capturePhotoData(deviceID: String) throws -> Data {
+    public func start(deviceID _: String) throws {
         throw CameraPhotoCaptureError.captureFailed(message: "Still photo capture is not configured")
     }
-}
 
-public struct AVFoundationStillPhotoProducer: CameraStillPhotoProducing {
-    public var timeout: TimeInterval
-
-    public init(timeout: TimeInterval = 10) {
-        self.timeout = timeout
+    public func capturePhotoData() throws -> Data {
+        throw CameraPhotoCaptureError.captureFailed(message: "Still photo capture is not configured")
     }
 
-    public func capturePhotoData(deviceID: String) throws -> Data {
+    public func stop() {}
+}
+
+public final class AVFoundationStillSessionManager: CameraStillSessionManaging, @unchecked Sendable {
+    public var captureTimeout: TimeInterval
+    public var exposureSettleTimeout: TimeInterval
+    public var exposurePollInterval: TimeInterval
+    public var warmupFrameCount: Int
+
+    private let lock = NSLock()
+    private let warmupDelegate = StillSessionWarmupDelegate()
+    private let warmupQueue = DispatchQueue(label: "CameraBridgeCore.StillSessionWarmup")
+    private var session: AVCaptureSession?
+    private var photoOutput: AVCapturePhotoOutput?
+    private var videoOutput: AVCaptureVideoDataOutput?
+
+    public init(
+        captureTimeout: TimeInterval = 10,
+        exposureSettleTimeout: TimeInterval = 2,
+        exposurePollInterval: TimeInterval = 0.05,
+        warmupFrameCount: Int = 10
+    ) {
+        self.captureTimeout = captureTimeout
+        self.exposureSettleTimeout = exposureSettleTimeout
+        self.exposurePollInterval = exposurePollInterval
+        self.warmupFrameCount = warmupFrameCount
+    }
+
+    public func start(deviceID: String) throws {
         guard let device = discoverDevice(id: deviceID) else {
             throw CameraPhotoCaptureError.unavailableDevice(id: deviceID)
         }
+
+        stop()
 
         let session = AVCaptureSession()
         session.beginConfiguration()
@@ -304,11 +333,50 @@ public struct AVFoundationStillPhotoProducer: CameraStillPhotoProducing {
             throw CameraPhotoCaptureError.captureFailed(message: "Unable to add photo output to capture session")
         }
 
+        let videoOutput = AVCaptureVideoDataOutput()
+        videoOutput.alwaysDiscardsLateVideoFrames = true
+        videoOutput.setSampleBufferDelegate(warmupDelegate, queue: warmupQueue)
+        guard session.canAddOutput(videoOutput) else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Unable to add video output to capture session")
+        }
+
         session.addInput(input)
         session.addOutput(output)
+        session.addOutput(videoOutput)
         session.commitConfiguration()
+
+        do {
+            try configureExposure(for: device)
+        } catch let error as CameraPhotoCaptureError {
+            throw error
+        } catch {
+            throw CameraPhotoCaptureError.captureFailed(message: error.localizedDescription)
+        }
+
+        warmupDelegate.prepareForWarmup(requiredFrames: warmupFrameCount)
         session.startRunning()
-        defer { session.stopRunning() }
+
+        do {
+            try waitForWarmupFrames(session: session)
+            try waitForExposureToSettle(device: device, session: session)
+        } catch {
+            session.stopRunning()
+            throw error
+        }
+
+        lock.lock()
+        self.session = session
+        self.photoOutput = output
+        self.videoOutput = videoOutput
+        lock.unlock()
+    }
+
+    public func capturePhotoData() throws -> Data {
+        let output: AVCapturePhotoOutput
+
+        lock.lock()
+        defer { lock.unlock() }
+        output = try requirePreparedOutputLocked()
 
         let delegate = StillPhotoCaptureDelegate()
         let settings: AVCapturePhotoSettings
@@ -319,7 +387,65 @@ public struct AVFoundationStillPhotoProducer: CameraStillPhotoProducing {
         }
 
         output.capturePhoto(with: settings, delegate: delegate)
-        return try delegate.waitForPhotoData(timeout: timeout)
+        return try delegate.waitForPhotoData(timeout: captureTimeout)
+    }
+
+    public func stop() {
+        lock.lock()
+        defer { lock.unlock() }
+        session?.stopRunning()
+        session = nil
+        photoOutput = nil
+        videoOutput = nil
+    }
+
+    private func requirePreparedOutputLocked() throws -> AVCapturePhotoOutput {
+        guard let session, session.isRunning, let photoOutput else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Still photo session is not running")
+        }
+
+        return photoOutput
+    }
+
+    private func configureExposure(for device: AVCaptureDevice) throws {
+        guard device.isExposureModeSupported(.continuousAutoExposure) else {
+            return
+        }
+
+        do {
+            try device.lockForConfiguration()
+        } catch {
+            throw CameraPhotoCaptureError.captureFailed(message: "Unable to configure camera exposure")
+        }
+
+        device.exposureMode = .continuousAutoExposure
+        device.unlockForConfiguration()
+    }
+
+    private func waitForExposureToSettle(
+        device: AVCaptureDevice,
+        session: AVCaptureSession
+    ) throws {
+        let deadline = Date().addingTimeInterval(exposureSettleTimeout)
+
+        while device.isAdjustingExposure && Date() < deadline {
+            Thread.sleep(forTimeInterval: exposurePollInterval)
+        }
+
+        guard session.isRunning else {
+            throw CameraPhotoCaptureError.captureFailed(
+                message: "Still photo session stopped during exposure warmup"
+            )
+        }
+    }
+
+    private func waitForWarmupFrames(session: AVCaptureSession) throws {
+        let receivedRequiredFrames = warmupDelegate.waitForRequiredFrames(timeout: exposureSettleTimeout)
+        guard receivedRequiredFrames || session.isRunning else {
+            throw CameraPhotoCaptureError.captureFailed(
+                message: "Still photo session stopped before warmup frames arrived"
+            )
+        }
     }
 
     private func discoverDevice(id: String) -> AVCaptureDevice? {
@@ -354,7 +480,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
     private let permissionStatusProvider: any CameraPermissionStatusProviding
     private let permissionRequester: any CameraPermissionRequesting
     private let deviceListing: any CameraDeviceListing
-    private let photoProducer: any CameraStillPhotoProducing
+    private let stillSessionManager: any CameraStillSessionManaging
     private let artifactStore: any PhotoArtifactStoring
     private let now: @Sendable () -> Date
     private let stateLock = NSLock()
@@ -364,7 +490,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
         permissionStatusProvider: any CameraPermissionStatusProviding = AVFoundationCameraPermissionStatusProvider(),
         permissionRequester: any CameraPermissionRequesting = AVFoundationCameraPermissionRequester(),
         deviceListing: any CameraDeviceListing,
-        photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+        stillSessionManager: any CameraStillSessionManaging = UnimplementedStillSessionManager(),
         artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(),
         now: @escaping @Sendable () -> Date = { Date() },
         initialState: CameraState = CameraState()
@@ -372,7 +498,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
         self.permissionStatusProvider = permissionStatusProvider
         self.permissionRequester = permissionRequester
         self.deviceListing = deviceListing
-        self.photoProducer = photoProducer
+        self.stillSessionManager = stillSessionManager
         self.artifactStore = artifactStore
         self.now = now
         self.state = initialState
@@ -380,7 +506,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
 
     public convenience init(
         deviceListing: any CameraDeviceListing,
-        photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+        stillSessionManager: any CameraStillSessionManaging = UnimplementedStillSessionManager(),
         artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(),
         now: @escaping @Sendable () -> Date = { Date() },
         initialState: CameraState = CameraState()
@@ -389,7 +515,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
             permissionStatusProvider: AVFoundationCameraPermissionStatusProvider(),
             permissionRequester: AVFoundationCameraPermissionRequester(),
             deviceListing: deviceListing,
-            photoProducer: photoProducer,
+            stillSessionManager: stillSessionManager,
             artifactStore: artifactStore,
             now: now,
             initialState: initialState
@@ -439,6 +565,12 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
             throw CameraDeviceSelectionError.ownershipConflict(currentOwnerID: currentOwnerID)
         }
 
+        if state.sessionState == .running {
+            let message = "Cannot change active device while session is running"
+            state.lastError = CameraStateError(message: message)
+            throw CameraDeviceSelectionError.sessionRunning
+        }
+
         guard deviceListing.availableDevices().contains(where: { $0.id == id }) else {
             let message = "Requested device is unavailable: \(id)"
             state.lastError = CameraStateError(message: message)
@@ -480,10 +612,20 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
             throw CameraSessionLifecycleError.alreadyRunning
         }
 
-        state.sessionState = .running
-        state.currentOwnerID = ownerID
-        state.lastError = nil
-        return state
+        let activeDeviceID = state.activeDeviceID!
+
+        do {
+            try stillSessionManager.start(deviceID: activeDeviceID)
+            state.sessionState = .running
+            state.currentOwnerID = ownerID
+            state.lastError = nil
+            return state
+        } catch {
+            state.sessionState = .stopped
+            state.currentOwnerID = nil
+            state.lastError = CameraStateError(message: errorMessage(for: error))
+            throw error
+        }
     }
 
     public func stopSession(ownerID: String) throws -> CameraState {
@@ -508,6 +650,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
             throw CameraSessionLifecycleError.ownershipConflict(currentOwnerID: currentOwnerID)
         }
 
+        stillSessionManager.stop()
         state.sessionState = .stopped
         state.previewState = .stopped
         state.currentOwnerID = nil
@@ -546,7 +689,7 @@ public final class DefaultCameraSessionController: CameraPermissionControlling, 
         let capturedAt = now()
 
         do {
-            let data = try photoProducer.capturePhotoData(deviceID: activeDeviceID)
+            let data = try stillSessionManager.capturePhotoData()
             let fileURL = try artifactStore.storePhotoData(
                 data,
                 deviceID: activeDeviceID,
@@ -633,6 +776,14 @@ private extension CameraPhotoCaptureError {
     }
 }
 
+private func errorMessage(for error: Error) -> String {
+    if let error = error as? CameraPhotoCaptureError {
+        return error.message
+    }
+
+    return error.localizedDescription
+}
+
 private final class StillPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate, @unchecked Sendable {
     private let lock = NSLock()
     private let semaphore = DispatchSemaphore(value: 0)
@@ -683,5 +834,53 @@ private final class StillPhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDe
         if shouldSignal {
             semaphore.signal()
         }
+    }
+}
+
+private final class StillSessionWarmupDelegate: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var requiredFrames = 0
+    private var receivedFrames = 0
+
+    func prepareForWarmup(requiredFrames: Int) {
+        lock.lock()
+        self.requiredFrames = requiredFrames
+        receivedFrames = 0
+        lock.unlock()
+    }
+
+    func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        _ = output
+        _ = sampleBuffer
+        _ = connection
+
+        lock.lock()
+        receivedFrames += 1
+        lock.unlock()
+    }
+
+    func waitForRequiredFrames(timeout: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(timeout)
+
+        while Date() < deadline {
+            lock.lock()
+            let isReady = receivedFrames >= requiredFrames
+            lock.unlock()
+
+            if isReady {
+                return true
+            }
+
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        lock.lock()
+        let isReady = receivedFrames >= requiredFrames
+        lock.unlock()
+        return isReady
     }
 }

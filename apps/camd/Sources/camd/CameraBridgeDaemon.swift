@@ -88,7 +88,7 @@ struct CameraBridgeDaemon {
                 permissionStatusProvider: permissionStatusProvider
             ),
             deviceListing: deviceListing,
-            photoProducer: AVFoundationStillPhotoProducer(),
+            stillSessionManager: AVFoundationStillSessionManager(),
             artifactStore: DefaultPhotoArtifactStore()
         )
         let authToken = try configuration.resolvedAuthToken()

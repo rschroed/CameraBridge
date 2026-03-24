@@ -221,12 +221,14 @@ func defaultCameraSessionControllerRejectsMismatchedOwner() {
 
 @Test
 func defaultCameraSessionControllerStartsSessionWithSelectedDeviceAndOwner() throws {
+    let stillSessionManager = RecordingStillSessionManager()
     let controller = DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(
             devices: [
                 CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
             ]
         ),
+        stillSessionManager: stillSessionManager,
         initialState: CameraState(
             permissionState: .notDetermined,
             sessionState: .stopped,
@@ -244,6 +246,40 @@ func defaultCameraSessionControllerStartsSessionWithSelectedDeviceAndOwner() thr
     #expect(state.activeDeviceID == "camera-1")
     #expect(state.currentOwnerID == "client-1")
     #expect(state.lastError == nil)
+    #expect(stillSessionManager.startedDeviceIDs == ["camera-1"])
+}
+
+@Test
+func defaultCameraSessionControllerRejectsDeviceSelectionWhileSessionIsRunning() {
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+                CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+            ]
+        ),
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.selectDevice(id: "camera-2", ownerID: "client-1")
+        Issue.record("Expected running session device selection to fail")
+    } catch let error as CameraDeviceSelectionError {
+        #expect(error == .sessionRunning)
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.activeDeviceID == "camera-1")
+    #expect(state.lastError == CameraStateError(message: "Cannot change active device while session is running"))
 }
 
 @Test
@@ -380,13 +416,53 @@ func defaultCameraSessionControllerRejectsStartForOwnerConflict() {
 }
 
 @Test
-func defaultCameraSessionControllerStopsRunningSessionAndReleasesOwner() throws {
+func defaultCameraSessionControllerRetainsStartFailureAsLastError() {
+    let stillSessionManager = RecordingStillSessionManager(
+        startError: CameraPhotoCaptureError.captureFailed(message: "Exposure warmup failed")
+    )
     let controller = DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(
             devices: [
                 CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
             ]
         ),
+        stillSessionManager: stillSessionManager,
+        initialState: CameraState(
+            permissionState: .authorized,
+            sessionState: .stopped,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: nil,
+            lastError: nil
+        )
+    )
+
+    do {
+        _ = try controller.startSession(ownerID: "client-1", permissionState: .authorized)
+        Issue.record("Expected session start to surface session manager failure")
+    } catch let error as CameraPhotoCaptureError {
+        #expect(error == .captureFailed(message: "Exposure warmup failed"))
+    } catch {
+        Issue.record("Unexpected error: \(error)")
+    }
+
+    let state = controller.currentCameraState()
+    #expect(state.sessionState == .stopped)
+    #expect(state.activeDeviceID == "camera-1")
+    #expect(state.currentOwnerID == nil)
+    #expect(state.lastError == CameraStateError(message: "Exposure warmup failed"))
+}
+
+@Test
+func defaultCameraSessionControllerStopsRunningSessionAndReleasesOwner() throws {
+    let stillSessionManager = RecordingStillSessionManager(startedDeviceID: "camera-1")
+    let controller = DefaultCameraSessionController(
+        deviceListing: FixedDeviceListing(
+            devices: [
+                CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            ]
+        ),
+        stillSessionManager: stillSessionManager,
         initialState: CameraState(
             permissionState: .authorized,
             sessionState: .running,
@@ -404,6 +480,7 @@ func defaultCameraSessionControllerStopsRunningSessionAndReleasesOwner() throws 
     #expect(state.activeDeviceID == "camera-1")
     #expect(state.currentOwnerID == nil)
     #expect(state.lastError == nil)
+    #expect(stillSessionManager.stopCount == 1)
 }
 
 @Test
@@ -469,11 +546,15 @@ func defaultCameraSessionControllerCapturesPhotoForRunningOwnedSession() throws 
     let directoryURL = makeTemporaryDirectory()
     let capturedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
     let expectedData = Data([0x01, 0x02, 0x03, 0x04])
+    let stillSessionManager = RecordingStillSessionManager(
+        startedDeviceID: "camera-1",
+        data: expectedData
+    )
     let controller = DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(
             devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
         ),
-        photoProducer: FixedStillPhotoProducer(data: expectedData),
+        stillSessionManager: stillSessionManager,
         artifactStore: DefaultPhotoArtifactStore(baseDirectoryURL: directoryURL),
         now: { capturedAt },
         initialState: CameraState(
@@ -493,6 +574,7 @@ func defaultCameraSessionControllerCapturesPhotoForRunningOwnedSession() throws 
     #expect(artifact.localPath.hasPrefix(directoryURL.path))
     #expect(try Data(contentsOf: URL(fileURLWithPath: artifact.localPath)) == expectedData)
     #expect(controller.currentCameraState().lastError == nil)
+    #expect(stillSessionManager.captureCount == 1)
 }
 
 @Test
@@ -553,13 +635,15 @@ func defaultCameraSessionControllerRejectsCaptureForOwnerMismatch() {
 
 @Test
 func defaultCameraSessionControllerRetainsCaptureFailureAsLastError() {
+    let stillSessionManager = RecordingStillSessionManager(
+        startedDeviceID: "camera-1",
+        captureError: .captureFailed(message: "AVFoundation timed out")
+    )
     let controller = DefaultCameraSessionController(
         deviceListing: FixedDeviceListing(
             devices: [CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front)]
         ),
-        photoProducer: FailingStillPhotoProducer(
-            error: .captureFailed(message: "AVFoundation timed out")
-        ),
+        stillSessionManager: stillSessionManager,
         initialState: CameraState(
             permissionState: .authorized,
             sessionState: .running,
@@ -610,19 +694,59 @@ private final class PermissionRequestResultBox: @unchecked Sendable {
     var result: PermissionRequestResult?
 }
 
-private struct FixedStillPhotoProducer: CameraStillPhotoProducing {
-    let data: Data
+private final class RecordingStillSessionManager: CameraStillSessionManaging, @unchecked Sendable {
+    private(set) var startedDeviceIDs: [String]
+    private(set) var captureCount = 0
+    private(set) var stopCount = 0
 
-    func capturePhotoData(deviceID: String) throws -> Data {
-        data
+    private var activeDeviceID: String?
+    private let data: Data?
+    private let startError: CameraPhotoCaptureError?
+    private let captureError: CameraPhotoCaptureError?
+
+    init(
+        startedDeviceID: String? = nil,
+        data: Data? = nil,
+        startError: CameraPhotoCaptureError? = nil,
+        captureError: CameraPhotoCaptureError? = nil
+    ) {
+        self.startedDeviceIDs = startedDeviceID.map { [$0] } ?? []
+        self.activeDeviceID = startedDeviceID
+        self.data = data
+        self.startError = startError
+        self.captureError = captureError
     }
-}
 
-private struct FailingStillPhotoProducer: CameraStillPhotoProducing {
-    let error: CameraPhotoCaptureError
+    func start(deviceID: String) throws {
+        if let startError {
+            throw startError
+        }
 
-    func capturePhotoData(deviceID: String) throws -> Data {
-        throw error
+        startedDeviceIDs.append(deviceID)
+        activeDeviceID = deviceID
+    }
+
+    func capturePhotoData() throws -> Data {
+        captureCount += 1
+
+        if let captureError {
+            throw captureError
+        }
+
+        guard activeDeviceID != nil else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Still photo session is not running")
+        }
+
+        guard let data else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Missing test photo data")
+        }
+
+        return data
+    }
+
+    func stop() {
+        stopCount += 1
+        activeDeviceID = nil
     }
 }
 

@@ -320,6 +320,12 @@ public enum CameraBridgeRoutes {
                         code: "ownership_conflict",
                         message: "Session is owned by \(currentOwnerID)"
                     )
+                case .sessionRunning:
+                    return .error(
+                        statusCode: 409,
+                        code: "invalid_state",
+                        message: "Cannot change active device while session is running"
+                    )
                 case .unavailableDevice(let id):
                     return .error(
                         statusCode: 409,

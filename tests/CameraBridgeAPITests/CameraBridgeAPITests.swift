@@ -725,6 +725,41 @@ func routerRejectsDeviceSelectionForOwnerMismatch() {
 }
 
 @Test
+func routerRejectsDeviceSelectionWhileSessionIsRunning() {
+    let sessionController = makeSessionController(
+        state: CameraState(
+            permissionState: .authorized,
+            sessionState: .running,
+            previewState: .stopped,
+            activeDeviceID: "camera-1",
+            currentOwnerID: "client-1",
+            lastError: nil
+        ),
+        devices: [
+            CameraDevice(id: "camera-1", name: "Built-in Camera", position: .front),
+            CameraDevice(id: "camera-2", name: "Desk Camera", position: .external),
+        ],
+        stillSessionManager: RecordingStillSessionManager(startedDeviceID: "camera-1")
+    )
+    let router = makeRouter(sessionController: sessionController)
+    let response = router.response(
+        for: HTTPRequest(
+            method: .post,
+            path: "/v1/session/select-device",
+            headers: ["Authorization": "Bearer test-token"],
+            body: Data(#"{"device_id":"camera-2","owner_id":"client-1"}"#.utf8)
+        )
+    )
+
+    #expect(response.statusCode == 409)
+    #expect(
+        String(decoding: response.body, as: UTF8.self) ==
+        #"{"error":{"code":"invalid_state","message":"Cannot change active device while session is running"}}"#
+    )
+    #expect(sessionController.currentCameraState().activeDeviceID == "camera-1")
+}
+
+@Test
 func routerReturnsUpdatedSessionStateForAuthorizedDeviceSelection() {
     let sessionController = makeSessionController(
         devices: [
@@ -840,6 +875,10 @@ func routerRejectsPhotoCaptureForOwnerMismatch() {
 func routerReturnsPhotoCaptureMetadataForAuthorizedOwner() throws {
     let directoryURL = makeTemporaryDirectory()
     let capturedAt = Date(timeIntervalSince1970: 1_710_000_000.123)
+    let stillSessionManager = RecordingStillSessionManager(
+        startedDeviceID: "camera-1",
+        data: Data([0x01, 0x02, 0x03])
+    )
     let sessionController = makeSessionController(
         state: CameraState(
             permissionState: .authorized,
@@ -849,7 +888,7 @@ func routerReturnsPhotoCaptureMetadataForAuthorizedOwner() throws {
             currentOwnerID: "client-1",
             lastError: nil
         ),
-        photoProducer: FixedStillPhotoProducer(data: Data([0x01, 0x02, 0x03])),
+        stillSessionManager: stillSessionManager,
         artifactStore: DefaultPhotoArtifactStore(baseDirectoryURL: directoryURL),
         now: { capturedAt }
     )
@@ -986,7 +1025,7 @@ private func makeSessionController(
     permissionRequester: any CameraPermissionRequesting = FixedPermissionRequester(
         result: .init(status: .authorized, prompted: false)
     ),
-    photoProducer: any CameraStillPhotoProducing = UnimplementedStillPhotoProducer(),
+    stillSessionManager: any CameraStillSessionManaging = RecordingStillSessionManager(),
     artifactStore: any PhotoArtifactStoring = DefaultPhotoArtifactStore(
         baseDirectoryURL: URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
             .appendingPathComponent("CameraBridgeAPITests", isDirectory: true)
@@ -997,7 +1036,7 @@ private func makeSessionController(
         permissionStatusProvider: permissionStatusProvider,
         permissionRequester: permissionRequester,
         deviceListing: FixedDeviceListing(devices: devices),
-        photoProducer: photoProducer,
+        stillSessionManager: stillSessionManager,
         artifactStore: artifactStore,
         now: now,
         initialState: state
@@ -1028,11 +1067,33 @@ private struct FixedDeviceListing: CameraDeviceListing {
     }
 }
 
-private struct FixedStillPhotoProducer: CameraStillPhotoProducing {
-    let data: Data
+private final class RecordingStillSessionManager: CameraStillSessionManaging, @unchecked Sendable {
+    private var activeDeviceID: String?
+    private let data: Data?
 
-    func capturePhotoData(deviceID: String) throws -> Data {
-        data
+    init(startedDeviceID: String? = nil, data: Data? = nil) {
+        self.activeDeviceID = startedDeviceID
+        self.data = data
+    }
+
+    func start(deviceID: String) throws {
+        activeDeviceID = deviceID
+    }
+
+    func capturePhotoData() throws -> Data {
+        guard activeDeviceID != nil else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Still photo session is not running")
+        }
+
+        guard let data else {
+            throw CameraPhotoCaptureError.captureFailed(message: "Missing test photo data")
+        }
+
+        return data
+    }
+
+    func stop() {
+        activeDeviceID = nil
     }
 }
 
